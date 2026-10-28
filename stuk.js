@@ -351,9 +351,6 @@ function startAudio(rn){
   const ev = [];
   if (rn.kind === 'sing'){
     for (let k = 0; k < rn.nPulse; k++) ev.push({ t: rn.cs + k * rn.pulse, click: true, accent: k === 0 });
-    if (O.click) for (let k = 0; ; k++){
-      const tt = rn.t0 + k * rn.pulse; if (tt - rn.t0 > rn.dur) break; ev.push({ t: tt, click: true, accent: false });
-    }
   }
   piece.parts.forEach((p, pi) => {
     for (const n of reducedOf(p)){
@@ -363,15 +360,21 @@ function startAudio(rn){
     }
   });
   ev.sort((a, b) => a.t - b.t);
-  let i = 0;
+  let i = 0, kc = 0;
   const tick = () => {
     const lim = ac.currentTime + 0.7;
+    // metronoom: live aan/uit te zetten tijdens het afspelen
+    while (rn.t0 + kc * rn.pulse < Math.min(lim, rn.t0 + rn.dur - 1e-6)){
+      const tt = rn.t0 + kc * rn.pulse;
+      if (O.click && tt >= ac.currentTime - 0.05) click(bus, tt, kc % rn.nPulse === 0);
+      kc++;
+    }
     while (i < ev.length && ev[i].t < lim){
       const e = ev[i++];
       if (e.t < ac.currentTime - 0.05) continue;
       if (e.click) click(bus, e.t, e.accent); else playNote(rn.partBus[e.pi], e.t, e.d, e.m, e.vol);
     }
-    if (i >= ev.length) { clearInterval(rn.timer); rn.timer = null; }
+    if (i >= ev.length && rn.t0 + kc * rn.pulse >= rn.t0 + rn.dur - 1e-6) { clearInterval(rn.timer); rn.timer = null; }
   };
   tick(); rn.timer = setInterval(tick, 40);
 }
@@ -646,7 +649,7 @@ body.stuk #bar,body.stuk #res,body.stuk #card,body.stuk #meter,body.stuk #chip{d
 .hrow .t{flex:1;min-width:0;font-size:14px}.hrow .t small{display:block;color:var(--mute);font-size:12px;margin-top:2px}
 .hrow button{flex:none;padding:8px 12px;border-radius:10px;background:#3a3e48;font-weight:600;font-size:13px;color:#fff}
 #nav button{flex:1;padding:9px 8px;border-radius:10px;background:#2f333b;font-size:13px;font-weight:600;color:#d7dae5}
-#sbar .col{width:64px}
+#sbar .col{width:64px}#sbar .col .lbl{white-space:nowrap}#sMet.on{background:var(--orange);color:#1c1105}#sMet.on svg{stroke:#1c1105}
 `;
 document.head.append(css);
 
@@ -666,7 +669,8 @@ const sbar = document.createElement('div'); sbar.id = 'sbar'; sbar.className = '
 sbar.innerHTML = `
 <div class="col"><button id="sMix" aria-label="Mixer"><svg viewBox="0 0 24 24"><path d="M5 4v16M12 4v16M19 4v16"/><circle cx="5" cy="14" r="2" fill="currentColor"/><circle cx="12" cy="8" r="2" fill="currentColor"/><circle cx="19" cy="15" r="2" fill="currentColor"/></svg></button><span class="lbl">Mixer</span></div>
 <div class="col"><button id="sListen" aria-label="Luister"><svg viewBox="0 0 24 24"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7M18.5 5.5a9 9 0 010 13"/></svg></button><span class="lbl" id="sListenL">Luister</span></div>
-<div class="col"><button id="sSing" class="big" aria-label="Zing mee"><svg viewBox="0 0 24 24" id="sSingI"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg></button><span class="lbl" id="sSingL">Zing mee</span></div>`;
+<div class="col"><button id="sSing" class="big" aria-label="Zing mee"><svg viewBox="0 0 24 24" id="sSingI"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg></button><span class="lbl" id="sSingL">Zing mee</span></div>
+<div class="col"><button id="sMet" aria-label="Metronoom"><svg viewBox="0 0 24 24"><path d="M9 3h6l4 18H5L9 3z"/><path d="M12 17L16 7"/><circle cx="16" cy="7" r="1.5" fill="currentColor"/></svg></button><span class="lbl" id="sMetL">Metronoom</span></div>`;
 app.append(sbar);
 
 const sheet = document.createElement('div'); sheet.className = 'sheet stuk-only'; sheet.id = 'ssetup'; sheet.hidden = true;
@@ -707,7 +711,7 @@ sheet.innerHTML = `<div class="wrap">
 <div class="small">Heeft een stem op één moment twee noten, dan oefen je de bovenste of onderste.</div>
 <div class="small" style="margin-top:14px">Het volume van elke stem stel je in met de knop “Mixer” onderin het scherm. Gebruik oordopjes als er stemmen meespelen tijdens het zingen.</div>
 <h2>Opties</h2>
-<div class="row"><div>Klik tijdens het zingen</div><button class="sw" id="swClick" aria-label="Klik"></button></div>
+<div class="row"><div>Metronoom</div><button class="sw" id="swClick" aria-label="Klik"></button></div>
 <button class="go" id="sDone">Klaar</button>
 
 </div>
@@ -743,7 +747,7 @@ function renderSetup(){
   }
   seg($('spdSeg'), [[.5, '50%'], [.7, '70%'], [.85, '85%'], [1, '100%']], O.speed, v => { O.speed = v; });
   seg($('chordSeg'), [['top', 'Bovenste noot'], ['bottom', 'Onderste noot']], O.chord, v => { O.chord = v; prepare(); });
-  $('swClick').classList.toggle('on', O.click);
+  $('swClick').classList.toggle('on', O.click); $('sMet').classList.toggle('on', O.click);
 }
 [['swClick', 'click']].forEach(([id, k]) => { $(id).onclick = () => { O[k] = !O[k]; renderSetup(); }; });
 
@@ -920,6 +924,7 @@ function updateHead(){
 const esc = s => String(s).replace(/[&<>]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[c]));
 
 function refresh(){
+  { const mb = $('sMet'); if (mb) mb.classList.toggle('on', !!O.click); }
   const running = state === 'count' || state === 'listen' || state === 'sing';
   $('sListenL').textContent = state === 'listen' ? 'Stop' : 'Luister';
   $('sSingL').textContent = state === 'sing' ? 'Klaar' : (state === 'count' ? 'Stop' : 'Zing mee');
@@ -928,6 +933,7 @@ function refresh(){
   updateHead(); scoreSync();
 }
 $('sListen').onclick = () => { if (state === 'listen') stopAll(); else start('listen'); };
+$('sMet').onclick = () => { O.click = !O.click; $('sMet').classList.toggle('on', O.click); const sc = $('swClick'); if (sc) sc.classList.toggle('on', O.click); savePiece(); };
 $('sSing').onclick = () => { if (state === 'sing') stopSing(); else if (state === 'count') stopAll(); else start('sing'); };
 { const hd = $('sheadA'); hd.style.pointerEvents = 'auto'; hd.style.cursor = 'pointer'; hd.title = 'Stem, tempo en opties'; hd.addEventListener('click', e => { if (e.target.closest('button')) return; if (piece) openSetup('B'); }); }
 
