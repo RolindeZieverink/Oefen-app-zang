@@ -95,7 +95,7 @@ function parseXML(text){
       mq += len;
     });
     const id = pe.getAttribute('id');
-    parts.push({ name: (names[id] || '').trim() || ('Stem ' + (pi + 1)), notes });
+    parts.push({ xi: pi, name: (names[id] || '').trim() || ('Stem ' + (pi + 1)), notes });
   });
   const title = txt(kid(root, 'work') || root, 'work-title') || txt(root, 'movement-title') || 'Stuk';
   return finishPiece({ title, parts: parts.filter(p => p.notes.length), measures, tempo, time });
@@ -223,9 +223,9 @@ async function parseFile(file){
     }
     if (!root || !z[root]) root = Object.keys(z).find(k => /\.(musicxml|xml)$/i.test(k) && !/^META-INF/i.test(k));
     if (!root) throw new Error('zip');
-    return parseXML(await zipText(z[root]));
+    const xt = await zipText(z[root]); const pcz = parseXML(xt); pcz.xml = xt; return pcz;
   }
-  return parseXML(new TextDecoder('utf-8').decode(new Uint8Array(ab)).replace(/^﻿/, ''));
+  const xt2 = new TextDecoder('utf-8').decode(new Uint8Array(ab)).replace(/^﻿/, ''); const pcx = parseXML(xt2); pcx.xml = xt2; return pcx;
 }
 
 /* =========================================================
@@ -285,7 +285,7 @@ function reduce(arr){
 
 const labelToIdx = lab => { const i = piece.measures.findIndex(m => m.label === lab); return i < 0 ? 0 : i; };
 function prepare(){
-  idleT = null;
+  idleT = null; if (window.NKscore && piece) scoreSync();
   notes = piece ? reduce(piece.parts[partIdx].notes) : [];
 }
 function secOf(b){
@@ -408,13 +408,13 @@ function scoreAll(rn, final){
    Bediening
    ========================================================= */
 function stopAll(){
-  stopAudio(run); run = null; state = 'idle'; sres.hidden = true; refresh();
+  stopAudio(run); run = null; state = 'idle'; sres.hidden = true; if (window.NKscore) NKscore.clearMarks(); refresh();
 }
 async function start(kind){
   if (!piece || !notes.length){ openSetup(); return; }
   if (!buildRunPreview().notes.length){ updateNone(); return; }
   if (!C.ac) return;
-  stopAudio(run); sres.hidden = true; pan = 0; sel = null;
+  stopAudio(run); sres.hidden = true; pan = 0; sel = null; lastPan = 0; if (window.NKscore) NKscore.clearMarks();
   try { await C.ac.resume(); } catch(e){}
   const rn = buildRun(kind), now = C.ac.currentTime;
   if (kind === 'sing'){ rn.cs = now + 0.25; rn.t0 = rn.cs + rn.nPulse * rn.pulse; state = 'count'; }
@@ -459,6 +459,7 @@ function frame(ctx, W, H, dpr){
   let idleM = -0.6;
   if (!run && piece && notes.length){ const rv = buildRunView(); if (idleT == null) idleT = initIdleT(rv); idleM = idleT; }
   const mnow = !run ? idleM : (state === 'done' ? run.frozen + pan : now - run.t0);
+  if (window.NKscore) scoreFrame(mnow);
 
   // toonbereik van deze stem
   let lo = 55, hi = 76;
@@ -757,7 +758,7 @@ function closeSetup(){
     f = Math.max(first, Math.min(last, f)); t = Math.max(f, Math.min(last, t));
     from = f; to = t; prepare();
   }
-  sheet.hidden = true; savePiece(); refresh();
+  sheet.hidden = true; savePiece(); refresh(); scoreEnsure();
 }
 $('sDone').onclick = closeSetup;
 $('mAll').onclick = () => { if (!piece) return; $('mFrom').value = piece.measures[0].label; $('mTo').value = piece.measures[piece.measures.length - 1].label; };
@@ -802,6 +803,7 @@ async function loadFiles(files, add, title){
     const merged = list.length === 1 ? list[0].piece : mergePieces(list);
     setPiece(merged);
     if (title){ piece.title = title; renderSetup(); savePiece(); }
+    if (piece.xml && window.NKscore) NKscore.saveXml(piece.title, piece.xml);
     if (add && keepPart < merged.parts.length){ partIdx = keepPart; from = keepFrom; to = keepTo; prepare(); renderSetup(); savePiece(); }
   } catch (err){
     const m = err && err.message;
@@ -901,7 +903,7 @@ function updateNone(){
 }
 function updateHead(){
   updateNone();
-  { const h = $('shint'); if (h) h.hidden = !(piece && state === 'idle' && !run && notes.length); }
+  { const h = $('shint'); if (h) h.hidden = !(piece && state === 'idle' && !run && notes.length && !(window.NKscore && NKscore.active)); }
   const a = $('sheadA'), b = $('sheadB');
   if (!piece){ a.textContent = 'Geen stuk geladen'; b.textContent = ''; return; }
   const names = partNames();
@@ -924,7 +926,7 @@ function refresh(){
   $('sSingL').textContent = state === 'sing' ? 'Klaar' : (state === 'count' ? 'Stop' : 'Zing mee');
   $('sSingI').innerHTML = (state === 'count' || state === 'sing') ? '<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/>' : '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/>';
   $('sListen').disabled = $('sSing').disabled = false;
-  updateHead();
+  updateHead(); scoreSync();
 }
 $('sListen').onclick = () => { if (state === 'listen') stopAll(); else start('listen'); };
 $('sSing').onclick = () => { if (state === 'sing') stopSing(); else if (state === 'count') stopAll(); else start('sing'); };
@@ -1049,7 +1051,7 @@ function snapToMeasure(){
   from = lab; if (to < from) to = last;
   previewKey = ''; savePiece();
   idleT = rv.sec(piece.measures[best].b) - 0.6;
-  updateHead(); updateNone();
+  updateHead(); updateNone(); scoreSync(); if (window.NKscore && NKscore.active) NKscore.scrollToMeasure(best);
 }
 cvEl.addEventListener('pointerup', e => {
   if (!drag || !geom){ drag = null; return; }
@@ -1160,13 +1162,13 @@ function renderHist(){
   $('hTerug').onclick = () => { hist.hidden = true; if (run && state === 'done') showResult(); };
 }
 function reviewAttempt(a){
-  stopAll(); from = a.from; to = a.to; O.speed = a.speed; if (a.chord) O.chord = a.chord; prepare(); previewKey = '';
+  stopAll(); from = a.from; to = a.to; O.speed = a.speed; lastPan = 0; if (a.chord) O.chord = a.chord; prepare(); previewKey = '';
   const rn = buildRun('sing');
   if (rn.notes.length !== a.st.length){ hist.querySelector('#hSub').textContent = 'Deze opname past niet meer bij het stuk (het stuk is veranderd).'; return; }
   rn.t0 = 0;
   rn.notes.forEach((n, i) => { const k = CK[a.st[i][0]] || 'none', c = a.st[i][1]; n.status = { k, cents: c, sung: n.m + c / 100 }; });
   for (let i = 0; i + 1 < a.fr.length; i += 2) rn.frames.push({ t: a.fr[i], m: a.fr[i + 1] < 0 ? null : a.fr[i + 1] });
-  run = rn; state = 'done'; run.frozen = run.dur + 0.5; pan = 0; sel = null;
+  run = rn; state = 'done'; run.frozen = run.dur + 0.5; pan = 0; sel = null; lastPan = 0;
   savePiece(); hist.hidden = true; sheet.hidden = true; mix.hidden = true;
   showResult(); refresh();
 }
@@ -1194,10 +1196,74 @@ const pend = e => { pts.delete(e.pointerId); if (pts.size < 2 && pinch){ pinch =
 cvEl.addEventListener('pointerup', pend); cvEl.addEventListener('pointercancel', pend);
 cvEl.addEventListener('wheel', e => { if (!document.body.classList.contains('stuk') || !e.ctrlKey) return; e.preventDefault(); setZoom(O.zoom * Math.exp(e.deltaY * 0.01), true); }, { passive: false });
 
+/* =========================================================
+   Bladmuziek (partituur.js)
+   ========================================================= */
+let scoreKey = '', lastFollow = -1, lastPan = 0;
+function scoreInit(){
+  if (!window.NKscore || scoreInit.done) return; scoreInit.done = true;
+  NKscore.init({
+    onTap: mi => {
+      if (!piece || state === 'count' || state === 'listen' || state === 'sing') return;
+      const last = piece.measures[piece.measures.length - 1].label;
+      from = piece.measures[mi].label; if (to < from) to = last;
+      prepare(); previewKey = ''; savePiece(); updateHead();
+      if (state === 'done' && run){ pan = Math.max(-1 - run.frozen, Math.min(0.4, run.sec(piece.measures[mi].b) - 0.5 - run.frozen)); }
+    },
+    onHold: mi => {
+      if (!piece || state === 'count' || state === 'listen' || state === 'sing') return;
+      const lab = piece.measures[mi].label; to = Math.max(lab, from);
+      prepare(); previewKey = ''; savePiece(); updateHead();
+    },
+    onNote: idx => { if (state === 'done' && run && run.notes[idx]){ sel = run.notes[idx]; NKscore.select(idx); pan = sel.s + 0.5 - run.frozen; } },
+    onRendered: () => { scoreSync(); if (run) { run._mk = 0; scoreFlush(); } }
+  });
+}
+function scoreEnsure(){
+  if (!window.NKscore || !piece || !piece.xml){ if (window.NKscore) NKscore.hide(); return; }
+  scoreInit();
+  const names = partNames();
+  NKscore.show(piece.xml, piece.title, (piece.parts[partIdx].xi != null ? piece.parts[partIdx].xi : partIdx)).then(ok => { if (ok) scoreSync(); });
+}
+function scoreSync(){
+  if (!window.NKscore || !NKscore.active || !piece) return;
+  const a = labelToIdx(from), b = Math.max(a, labelToIdx(to));
+  const pg = measProgress();
+  NKscore.setSel(a, b); NKscore.setStatus(piece.measures.map(ms => pg[ms.label]));
+  scoreSync.k = piece.title + partIdx;
+}
+function scoreFlush(){
+  if (!window.NKscore || !NKscore.active || !run || run.kind !== 'sing') return;
+  if (run._mk == null) run._mk = 0;
+  while (run._mk < run.notes.length && run.notes[run._mk].status){
+    const n = run.notes[run._mk]; const ms = piece.measures[n.meas];
+    if (ms) NKscore.mark(n.meas, n.b - ms.b, n.m, n.status.k, run._mk);
+    run._mk++;
+  }
+}
+function beatPos(rn, t){
+  for (let i = rn.i0; i <= rn.i1; i++){
+    const ms = piece.measures[i], s0 = rn.sec(ms.b), s1 = rn.sec(ms.b + ms.len);
+    if (t >= s0 && t < s1) return { mi: i, off: (t - s0) / Math.max(1e-6, s1 - s0) * ms.len };
+  }
+  return null;
+}
+function scoreFrame(mnow){
+  if (!NKscore.active) return;
+  if (run && (state === 'sing' || state === 'listen')){
+    const p = beatPos(run, mnow);
+    if (p){ NKscore.playhead(p.mi, p.off); if (p.mi !== lastFollow){ lastFollow = p.mi; NKscore.follow(p.mi); } } else NKscore.hidePlayhead();
+    scoreFlush();
+  } else if (run && state === 'done'){
+    scoreFlush();
+    if (pan !== lastPan){ lastPan = pan; const p = beatPos(run, mnow); if (p){ NKscore.playhead(p.mi, p.off); if (p.mi !== lastFollow){ lastFollow = p.mi; NKscore.follow(p.mi); } } }
+  } else { NKscore.hidePlayhead(); lastFollow = -1; }
+}
+
 window.NKstuk = {
   frame,
-  enter(){ medBuf = []; if (!piece && restore()) prepare(); koorAuto().then(() => { if (!sheet.hidden) renderSetup(); }); openSetup('A'); },
-  leave(){ stopAll(); sheet.hidden = true; hist.hidden = true; },
+  enter(){ medBuf = []; if (!piece && restore()) prepare(); if (piece && !piece.xml && window.NKscore) NKscore.loadXml(piece.title).then(x => { if (x && piece && !piece.xml) piece.xml = x; }); koorAuto().then(() => { if (!sheet.hidden) renderSetup(); }); openSetup('A'); },
+  leave(){ stopAll(); sheet.hidden = true; hist.hidden = true; if (window.NKscore) NKscore.hide(); },
   _t: { parseXML, parseMidi, parseFile, reduce, evalNote, demoPiece, finishPiece, get state(){ return state; }, get run(){ return run; }, get notes(){ return notes; }, setPiece, get piece(){ return piece; } }
 };
 })();

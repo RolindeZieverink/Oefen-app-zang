@@ -1,5 +1,5 @@
-const V = 'naklank-v14';
-const FILES = ['./', 'index.html', 'stuk.js', 'koor.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
+const V = 'naklank-v15';
+const FILES = ['./', 'index.html', 'stuk.js', 'koor.js', 'partituur.js', 'lib/osmd.min.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(V).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
