@@ -231,7 +231,7 @@ async function parseFile(file){
 /* =========================================================
    Stuk, stem, tijdlijn
    ========================================================= */
-const DEF = { chord:'top', speed:1, click:false, volL:{}, volS:{}, mixMode:'L' };
+const DEF = { chord:'top', speed:1, click:false, volL:{}, volS:{}, mixMode:'L', zoom:1 };
 let O = loadO();
 let piece = null, partIdx = 0, from = 1, to = 1, notes = [];
 let state = 'idle';     // idle | count | listen | sing | done
@@ -421,6 +421,17 @@ async function start(kind){
   else { rn.t0 = now + 0.35; state = 'listen'; }
   run = rn; startAudio(rn); refresh();
 }
+// tussentijds stoppen met zingen: je krijgt toch een analyse van wat je gezongen hebt
+function stopSing(){
+  if (!run || run.kind !== 'sing' || state !== 'sing'){ stopAll(); return; }
+  const el = C.ac.currentTime - run.t0 - LAT;
+  stopAudio(run);
+  run.notes = run.notes.filter(n => n.status || n.s + Math.min(0.3, (n.e - n.s) * 0.35) + 0.35 <= el);
+  run.dur = Math.max(0.5, el);
+  scoreAll(run, true);
+  run.frozen = Math.max(0.5, el) + 0.5; state = 'done'; pan = 0; sel = null;
+  saveAttempt(run); showResult(); refresh();
+}
 function finish(){
   if (!run) return;
   if (run.kind === 'sing'){
@@ -439,7 +450,7 @@ function frame(ctx, W, H, dpr){
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
   const ac = C.ac, now = ac ? ac.currentTime : 0;
   if (run){
-    if (state === 'count' && now >= run.t0) state = 'sing';
+    if (state === 'count' && now >= run.t0){ state = 'sing'; refresh(); }
     if (state === 'sing' && C.analyser){ C.analyser.getFloatTimeDomainData(C.buf); sample(now); scoreAll(run, false); }
     if ((state === 'sing' || state === 'listen') && now - run.t0 > run.dur + (run.kind === 'sing' ? 0.9 : 0.4)) finish();
   }
@@ -454,7 +465,7 @@ function frame(ctx, W, H, dpr){
   if (notes.length){ lo = Math.min(...notes.map(n => n.m)) - 3; hi = Math.max(...notes.map(n => n.m)) + 3; }
   while (hi - lo < 13){ hi++; if (hi - lo < 13) lo--; }
   const n_ = hi - lo + 1, KW = Math.max(64, Math.min(84, W * 0.2)), gw = W - KW, rh = H / n_;
-  const pxps = gw / WINDOW, phX = gw * PLAYHEAD;
+  const pxps = gw / (WINDOW * O.zoom), phX = gw * PLAYHEAD;
   geom = { KW, gw, rh, lo, hi, phX, pxps, mnow };
   const rowY = m => (hi - m) * rh;
 
@@ -621,6 +632,8 @@ body.stuk #bar,body.stuk #res,body.stuk #card,body.stuk #meter,body.stuk #chip{d
 #snone{pointer-events:none}#snone button{pointer-events:auto}
 #shint{position:absolute;left:calc(var(--kw) + 10px);right:10px;bottom:10px;text-align:center;font-size:12px;color:var(--mute);background:rgba(23,25,28,.8);border-radius:999px;padding:6px 10px;pointer-events:none;z-index:3}
 #shint[hidden]{display:none}
+#szoom{position:absolute;right:10px;top:52px;display:flex;flex-direction:column;gap:6px;z-index:3}
+#szoom button{width:40px;height:40px;border-radius:12px;background:rgba(23,25,28,.85);border:1px solid var(--line);color:#fff;font-size:22px;font-weight:600;line-height:1}
 .prog{margin-top:10px}
 .mstrip{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}
 .mc{min-width:28px;padding:5px 4px;border-radius:7px;font-size:11px;font-weight:650;text-align:center;background:#3a3e48;color:#aab0c0;cursor:pointer;user-select:none}
@@ -640,6 +653,8 @@ const stage = $('stage'), app = $('app');
 const head = document.createElement('div'); head.id = 'shead'; head.className = 'stuk-only';
 head.innerHTML = '<div class="a" id="sheadA"></div><div class="b" id="sheadB"></div>'; stage.append(head);
 
+const szoom = document.createElement('div'); szoom.id = 'szoom'; szoom.className = 'stuk-only';
+szoom.innerHTML = '<button id="zIn" aria-label="Inzoomen">+</button><button id="zOut" aria-label="Uitzoomen">−</button>'; stage.append(szoom);
 const shint = document.createElement('div'); shint.id = 'shint'; shint.className = 'stuk-only'; shint.textContent = '← Sleep om naar een andere maat te gaan →'; shint.hidden = true; stage.append(shint);
 const sno = document.createElement('div'); sno.id = 'snone'; sno.className = 'stuk-only'; sno.hidden = true; stage.append(sno);
 const sres = document.createElement('div'); sres.id = 'sres'; sres.className = 'stuk-only'; sres.hidden = true;
@@ -906,13 +921,13 @@ const esc = s => String(s).replace(/[&<>]/g, c => ({ '&':'&amp;', '<':'&lt;', '>
 function refresh(){
   const running = state === 'count' || state === 'listen' || state === 'sing';
   $('sListenL').textContent = state === 'listen' ? 'Stop' : 'Luister';
-  $('sSingL').textContent = (state === 'count' || state === 'sing') ? 'Stop' : 'Zing mee';
+  $('sSingL').textContent = state === 'sing' ? 'Klaar' : (state === 'count' ? 'Stop' : 'Zing mee');
   $('sSingI').innerHTML = (state === 'count' || state === 'sing') ? '<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/>' : '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/>';
   $('sListen').disabled = $('sSing').disabled = false;
   updateHead();
 }
 $('sListen').onclick = () => { if (state === 'listen') stopAll(); else start('listen'); };
-$('sSing').onclick = () => { if (state === 'count' || state === 'sing') stopAll(); else start('sing'); };
+$('sSing').onclick = () => { if (state === 'sing') stopSing(); else if (state === 'count') stopAll(); else start('sing'); };
 $('sSet').onclick = () => openSetup();
 
 const mix = document.createElement('div'); mix.id = 'smix'; mix.className = 'stuk-only'; mix.hidden = true;
@@ -959,6 +974,13 @@ function jumpError(dir){
 
 function showResult(){
   const ns = run.notes, tot = ns.length;
+  if (!tot){
+    const badge0 = $('sbadge'); badge0.className = 'badge neutral'; badge0.textContent = '–'; badge0.style.fontSize = '24px';
+    $('stitle').textContent = 'Te kort om te beoordelen'; $('sdetail').textContent = 'Zing iets langer mee, dan krijg je een analyse van je noten.';
+    $('sissues').innerHTML = ''; const bt0 = $('sbtns'); bt0.innerHTML = '';
+    const b0 = document.createElement('button'); b0.className = 'btn main'; b0.textContent = 'Nog eens'; b0.onclick = () => start('sing'); bt0.append(b0);
+    sres.hidden = false; return;
+  }
   const ok = ns.filter(n => n.status.k === 'ok').length, pct = tot ? Math.round(100 * ok / tot) : 0;
   const badge = $('sbadge'), t = $('stitle'), d = $('sdetail'), iss = $('sissues'), bt = $('sbtns');
   badge.className = 'badge ' + (pct >= 85 ? 'ok' : (pct >= 50 ? 'neutral' : 'bad'));
@@ -1151,6 +1173,26 @@ function reviewAttempt(a){
 $('histBtn').onclick = openHist;
 $('vbBack').onclick = () => showView('A');
 $('vaCont').onclick = () => showView('B');
+
+/* in- en uitzoomen: knoppen, knijpen met twee vingers, of Ctrl + scrollen */
+const ZMIN = 0.3, ZMAX = 4;
+function setZoom(z, save){ O.zoom = Math.max(ZMIN, Math.min(ZMAX, z)); if (save) savePiece(); }
+$('zIn').onclick = () => setZoom(O.zoom / 1.4, true);
+$('zOut').onclick = () => setZoom(O.zoom * 1.4, true);
+const pts = new Map(); let pinch = null;
+cvEl.addEventListener('pointerdown', e => {
+  if (!document.body.classList.contains('stuk')) return;
+  pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pts.size === 2){ const [a, b] = [...pts.values()]; pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, z0: O.zoom }; drag = null; }
+});
+cvEl.addEventListener('pointermove', e => {
+  if (!pts.has(e.pointerId)) return;
+  pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && pts.size >= 2){ const [a, b] = [...pts.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y) || 1; setZoom(pinch.z0 * pinch.d0 / d, false); }
+});
+const pend = e => { pts.delete(e.pointerId); if (pts.size < 2 && pinch){ pinch = null; savePiece(); } };
+cvEl.addEventListener('pointerup', pend); cvEl.addEventListener('pointercancel', pend);
+cvEl.addEventListener('wheel', e => { if (!document.body.classList.contains('stuk') || !e.ctrlKey) return; e.preventDefault(); setZoom(O.zoom * Math.exp(e.deltaY * 0.01), true); }, { passive: false });
 
 window.NKstuk = {
   frame,
