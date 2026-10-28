@@ -57,19 +57,19 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-acti
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,59,48,.5)}50%{box-shadow:0 0 0 8px rgba(255,59,48,0)}}
 
 /* resultaat */
-#res{flex:none;padding:14px 16px 12px;border-radius:18px 18px 0 0;background:#22252b;
+#res,#sres{flex:none;padding:14px 16px 12px;border-radius:18px 18px 0 0;background:#22252b;
   border-top:1px solid var(--line);box-shadow:0 -10px 24px rgba(0,0,0,.35);position:relative;z-index:2;animation:up .22s ease-out}
-#res[hidden]{display:none}
+#res[hidden],#sres[hidden]{display:none}
 @keyframes up{from{transform:translateY(14px);opacity:0}to{transform:none;opacity:1}}
-#res .top{display:flex;gap:14px;align-items:center}
+#res .top,#sres .top{display:flex;gap:14px;align-items:center}
 .badge{width:60px;height:60px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:34px;font-weight:700;line-height:1}
 .badge svg{width:34px;height:34px}
 .badge.ok{background:var(--ok);color:#06210f;animation:pop .35s cubic-bezier(.2,1.6,.4,1)}
 .badge.bad{background:var(--bad);color:#2b0a06}
 .badge.neutral{background:#4a4f5c;color:var(--ink)}
 @keyframes pop{from{transform:scale(.4)}to{transform:scale(1)}}
-#resTitle{font-size:22px;font-weight:700}
-#resDetail{font-size:14px;color:#c5c9d6;margin-top:2px}
+#resTitle,#stitle{font-size:22px;font-weight:700}
+#resDetail,#sdetail{font-size:14px;color:#c5c9d6;margin-top:2px}
 #resHint{font-size:13px;color:var(--mute);margin-top:10px}
 .btns{display:flex;gap:10px;margin-top:12px}
 .btn{flex:1;padding:13px 10px;border-radius:12px;font-weight:650;background:#363a43;text-align:center}
@@ -78,14 +78,14 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-acti
 .btn:active{filter:brightness(.88)}
 
 /* onderbalk */
-#bar{display:flex;align-items:center;justify-content:space-between;padding:10px 18px calc(10px + env(safe-area-inset-bottom,0px));
+#bar,#sbar{display:flex;align-items:center;justify-content:space-between;padding:10px 18px calc(10px + env(safe-area-inset-bottom,0px));
   background:#1d2024;border-top:1px solid #000}
-#bar button{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;color:var(--ink)}
-#bar button svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-#bar .big{width:68px;height:68px;background:var(--orange);color:#1c1105}
-#bar .big svg{width:30px;height:30px}
-#bar button:active{opacity:.7}
-#bar .lbl{font-size:11px;color:var(--mute);margin-top:-2px}
+#bar button,#sbar button{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;color:var(--ink)}
+#bar button svg,#sbar button svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#bar .big,#sbar .big{width:68px;height:68px;background:var(--orange);color:#1c1105}
+#bar .big svg,#sbar .big svg{width:30px;height:30px}
+#bar button:active,#sbar button:active{opacity:.7}
+#bar .lbl,#sbar .lbl{font-size:11px;color:var(--mute);margin-top:-2px}
 .col{display:flex;flex-direction:column;align-items:center;gap:2px;width:72px}
 
 /* start- en instellingenschermen */
@@ -114,10 +114,14 @@ h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
 #err{margin-top:16px;padding:12px 14px;border-radius:12px;background:rgba(255,107,94,.12);color:#ffb4ac;font-size:14px}
 #err[hidden]{display:none}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+#tabs{display:flex;gap:8px;padding:6px 12px;background:#1d2024;border-bottom:1px solid #000;flex:none}
+#tabs button{flex:1;padding:9px 8px;border-radius:10px;background:#2b2f37;color:#c5c9d6;font-weight:650;font-size:14px}
+#tabs button.on{background:var(--orange);color:#1c1105}
 </style>
 </head>
 <body>
 <div id="app">
+  <div id="tabs"><button data-m="toon" class="on">Toon nazingen</button><button data-m="stuk">Stuk oefenen</button></div>
   <div id="stage">
     <canvas id="cv"></canvas>
     <div id="meter"><div class="mrow"><span>−50C</span><b id="mnote">–</b><span>+50C</span></div><div class="track"><span class="mid"></span><i id="thumb"></i></div></div>
@@ -148,7 +152,8 @@ h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
     </ol>
     <h2>Stemgroep</h2>
     <div class="seg" id="voiceStart"></div>
-    <button class="go" id="goBtn">Start</button>
+    <button class="go" id="goBtn">Start: toon nazingen</button>
+    <button class="go sec" id="goBtn2">Stuk oefenen (MusicXML of MIDI)</button>
     <div id="err" hidden></div>
     <p class="note">Gebruik bij voorkeur oordopjes, dan hoort de microfoon alleen jouw stem. Sta in een rustige ruimte.</p>
     <p class="note" id="iosTip" hidden>Tip: tik in Safari op Deel en kies “Zet op beginscherm” om dit als app te gebruiken.</p>
@@ -359,6 +364,7 @@ new ResizeObserver(resize).observe($('stage'));
 function loop(){
   requestAnimationFrame(loop);
   const now = performance.now() / 1000;
+  if (mode === 'stuk'){ if (window.NKstuk) window.NKstuk.frame(ctx, W, H, dpr); return; }
   const keepGoing = st === 'result' && outcome && outcome.ok;   // na een goed antwoord mag je doorzingen
   if ((st === 'sing' || keepGoing) && analyser){
     analyser.getFloatTimeDomainData(buf);
@@ -615,7 +621,7 @@ $('closeSet').onclick = () => {
 $('resetScore').onclick = () => { stats.rounds = 0; stats.first = 0; saveStats(); $('score').textContent = '0/0'; };
 
 renderVoice($('voiceStart'));
-$('goBtn').onclick = async () => {
+async function startApp(want){
   const err = $('err'); err.hidden = true;
   try {
     await initAudio();
@@ -628,8 +634,28 @@ $('goBtn').onclick = async () => {
     return;
   }
   $('start').hidden = true;
-  newRound();
-};
+  if (want === 'stuk') setMode('stuk'); else newRound();
+}
+$('goBtn').onclick = () => startApp('toon');
+$('goBtn2').onclick = () => startApp('stuk');
+
+window.NKcore = { get ac(){ return ac; }, get analyser(){ return analyser; }, get buf(){ return buf; }, get S(){ return S; }, detect, nm, isBlack, mtof, median };
+
+let mode = 'toon';
+function setMode(m){
+  if (mode === m) return;
+  mode = m;
+  document.body.classList.toggle('stuk', m === 'stuk');
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.m === m));
+  if (m === 'stuk'){
+    stopTone(); runId++; st = 'idle'; $('res').hidden = true; ui();
+    if (window.NKstuk) window.NKstuk.enter();
+  } else {
+    if (window.NKstuk) window.NKstuk.leave();
+    if (ac) newRound();
+  }
+}
+document.querySelectorAll('#tabs button').forEach(b => { b.onclick = () => { if (!ac) { $('start').hidden = false; return; } setMode(b.dataset.m); }; });
 
 const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
 const standalone = window.navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
@@ -647,5 +673,6 @@ window.__nk = { setTarget(m){ target = m; }, get st(){ return st; }, get outcome
 resize(); ui(); requestAnimationFrame(loop);
 })();
 </script>
+<script src="stuk.js"></script>
 </body>
 </html>

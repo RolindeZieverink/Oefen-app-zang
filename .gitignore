@@ -1,0 +1,7 @@
+# Eigen oefenmateriaal (partituren, MIDI) blijft op de computer en gaat niet naar GitHub
+oefenmateriaal/
+*.musicxml
+*.mxl
+*.mid
+*.midi
+.DS_Store
