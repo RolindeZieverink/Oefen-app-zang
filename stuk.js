@@ -231,14 +231,14 @@ async function parseFile(file){
 /* =========================================================
    Stuk, stem, tijdlijn
    ========================================================= */
-const DEF = { chord:'top', speed:1, hide:false, click:false, volL:{}, volS:{}, mixMode:'L' };
+const DEF = { chord:'top', speed:1, click:false, volL:{}, volS:{}, mixMode:'L' };
 let O = loadO();
 let piece = null, partIdx = 0, from = 1, to = 1, notes = [];
 let state = 'idle';     // idle | count | listen | sing | done
 let run = null;
 let pan = 0, sel = null, geom = null;   // terugkijken na afloop
 
-function loadO(){ let o; try { o = Object.assign({}, DEF, (JSON.parse(localStorage.getItem(LS) || '{}').o) || {}); } catch(e){ o = Object.assign({}, DEF); } o.hide = false; return o; }   // noten verbergen staat bij elke start weer uit
+function loadO(){ let o; try { o = Object.assign({}, DEF, (JSON.parse(localStorage.getItem(LS) || '{}').o) || {}); } catch(e){ o = Object.assign({}, DEF); } return o; }
 function savePiece(){
   try {
     const pcs = piece ? { title: piece.title,
@@ -474,7 +474,6 @@ function frame(ctx, W, H, dpr){
       ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.fillText(String(ms.label), x + 4, 4);
     }
     // doelnoten
-    const hideTargets = O.hide && state === 'sing';
     const bh = Math.max(6, rh * 0.78);
     let activeM = null;
     for (const n of rn.notes){
@@ -482,7 +481,6 @@ function frame(ctx, W, H, dpr){
       if (x1 < -4 || x0 > gw) continue;
       const active = mnow >= n.s && mnow < n.e; if (active) activeM = n.m;
       const st = n.status;
-      if (hideTargets && !st) continue;
       let fill = active ? 'rgba(60,207,122,.85)' : 'rgba(60,207,122,.5)';
       if (st){ fill = st.k === 'ok' ? '#3ccf7a' : st.k === 'none' ? '#6b7080' : '#ff6b5e'; }
       const y = rowY(n.m) + (rh - bh) / 2, w = Math.max(3, x1 - x0 - 1.5);
@@ -665,7 +663,6 @@ sheet.innerHTML = `<div class="wrap">
 <div class="small">Heeft een stem op één moment twee noten, dan oefen je de bovenste of onderste.</div>
 <div class="small" style="margin-top:14px">Het volume van elke stem stel je in met de knop “Mixer” onderin het scherm. Gebruik oordopjes als er stemmen meespelen tijdens het zingen.</div>
 <h2>Opties</h2>
-<div class="row"><div>Noten verbergen tijdens het zingen<small>Je ziet de noten pas nadat je ze gezongen hebt. Staat bij het opstarten altijd uit.</small></div><button class="sw" id="swHide" aria-label="Noten verbergen"></button></div>
 <div class="row"><div>Klik tijdens het zingen</div><button class="sw" id="swClick" aria-label="Klik"></button></div>
 <button class="go" id="sDone">Klaar</button>
 </div>`;
@@ -697,9 +694,9 @@ function renderSetup(){
   }
   seg($('spdSeg'), [[.5, '50%'], [.7, '70%'], [.85, '85%'], [1, '100%']], O.speed, v => { O.speed = v; });
   seg($('chordSeg'), [['top', 'Bovenste noot'], ['bottom', 'Onderste noot']], O.chord, v => { O.chord = v; prepare(); });
-  $('swHide').classList.toggle('on', O.hide); $('swClick').classList.toggle('on', O.click);
+  $('swClick').classList.toggle('on', O.click);
 }
-[['swHide', 'hide'], ['swClick', 'click']].forEach(([id, k]) => { $(id).onclick = () => { O[k] = !O[k]; renderSetup(); }; });
+[['swClick', 'click']].forEach(([id, k]) => { $(id).onclick = () => { O[k] = !O[k]; renderSetup(); }; });
 
 function openSetup(){ stopAll(); renderSetup(); sheet.hidden = false; }
 function closeSetup(){
