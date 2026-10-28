@@ -442,7 +442,10 @@ function frame(ctx, W, H, dpr){
     if ((state === 'sing' || state === 'listen') && now - run.t0 > run.dur + (run.kind === 'sing' ? 0.9 : 0.4)) finish();
   }
   if (run && state === 'done') pan = Math.max(-1 - run.frozen, Math.min(0.4, pan));
-  const mnow = !run ? -0.6 : (state === 'done' ? run.frozen + pan : now - run.t0);
+  // in rust: laat meteen de eerste noten zien (ook als de stem eerst rust heeft)
+  let idleM = -0.6;
+  if (!run && piece && notes.length){ const pv = buildRunPreview(); if (pv.notes.length){ if (pv.first == null) pv.first = Math.min(...pv.notes.map(n => n.s)); idleM = Math.max(-0.6, pv.first - 1.2); } }
+  const mnow = !run ? idleM : (state === 'done' ? run.frozen + pan : now - run.t0);
 
   // toonbereik van deze stem
   let lo = 55, hi = 76;
