@@ -639,7 +639,10 @@ app.append(sbar);
 
 const sheet = document.createElement('div'); sheet.className = 'sheet stuk-only'; sheet.id = 'ssetup'; sheet.hidden = true;
 sheet.innerHTML = `<div class="wrap">
-<h1 style="font-size:32px">Stuk oefenen</h1>
+<div id="vA">
+<h1 style="font-size:32px">Repertoire</h1>
+<div class="small">Kies eerst een stuk om te oefenen.</div>
+<button class="go" id="vaCont" hidden style="margin-top:14px"></button>
 <h2>Mijn koor</h2>
 <div id="koorOut">
   <input id="koorCode" type="text" placeholder="Koorcode" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false">
@@ -658,6 +661,11 @@ sheet.innerHTML = `<div class="wrap">
 <div class="small">Je kunt één bestand met alle stemmen kiezen, of meerdere bestanden tegelijk, bijvoorbeeld één MIDI per stem. De bestandsnaam wordt dan de naam van de stem.</div>
 <button class="go sec" id="demoBtn" style="margin-top:10px">Voorbeeldmelodie laden</button>
 <div id="sstatus"></div>
+</div>
+<div id="vB" hidden>
+<button class="btn" id="vbBack" style="flex:none;padding:10px 14px">← Ander stuk kiezen</button>
+<h1 style="font-size:28px;margin-top:14px" id="vbTitle"></h1>
+<div class="small" id="vbInfo"></div>
 <div id="partWrap"><h2>Stem</h2><div class="seg" id="partSeg"></div><button class="go sec" id="histBtn" style="margin-top:12px">Mijn resultaten bij deze stem</button></div>
 <h2>Maten</h2>
 <div class="stp"><input id="mFrom" type="number" inputmode="numeric" min="1"><span>tot en met</span><input id="mTo" type="number" inputmode="numeric" min="1"><button class="btn" id="mAll" style="flex:none;padding:11px 14px">Alles</button></div>
@@ -669,6 +677,8 @@ sheet.innerHTML = `<div class="wrap">
 <h2>Opties</h2>
 <div class="row"><div>Klik tijdens het zingen</div><button class="sw" id="swClick" aria-label="Klik"></button></div>
 <button class="go" id="sDone">Klaar</button>
+
+</div>
 </div>`;
 document.body.append(sheet);
 
@@ -687,7 +697,10 @@ function partNames(){
 function fmtLen(){ return piece.measures.length; }
 function renderSetup(){
   renderKoor();
-  $('sstatus').textContent = piece ? piece.title + ' · ' + piece.parts.length + (piece.parts.length === 1 ? ' stem' : ' stemmen') + ' · ' + fmtLen() + ' maten' : 'Nog geen stuk geladen.';
+  $('sstatus').textContent = '';
+  $('vbTitle').textContent = piece ? piece.title : '';
+  $('vbInfo').textContent = piece ? piece.parts.length + (piece.parts.length === 1 ? ' stem' : ' stemmen') + ' · ' + fmtLen() + ' maten' : '';
+  $('vaCont').hidden = !piece; if (piece) $('vaCont').textContent = 'Verder met “' + piece.title + '”';
   $('partWrap').hidden = !piece;
   if (piece){
     const names = partNames();
@@ -702,7 +715,8 @@ function renderSetup(){
 }
 [['swClick', 'click']].forEach(([id, k]) => { $(id).onclick = () => { O[k] = !O[k]; renderSetup(); }; });
 
-function openSetup(){ stopAll(); renderSetup(); sheet.hidden = false; }
+function showView(v){ $('vA').hidden = v !== 'A'; $('vB').hidden = v !== 'B'; sheet.scrollTop = 0; }
+function openSetup(v){ stopAll(); renderSetup(); showView(v || (piece ? 'B' : 'A')); sheet.hidden = false; }
 function closeSetup(){
   if (piece){
     const first = piece.measures[0].label, last = piece.measures[piece.measures.length - 1].label;
@@ -834,7 +848,7 @@ async function koorAuto(){
 function setPiece(p){
   O.volL = {}; O.volS = {};
   piece = p; partIdx = 0; from = p.measures[0].label; to = p.measures[p.measures.length - 1].label;
-  prepare(); previewKey = ''; renderSetup(); savePiece();
+  prepare(); previewKey = ''; renderSetup(); showView('B'); savePiece();
 }
 
 function updateNone(){
@@ -881,7 +895,7 @@ function refresh(){
 }
 $('sListen').onclick = () => { if (state === 'listen') stopAll(); else start('listen'); };
 $('sSing').onclick = () => { if (state === 'count' || state === 'sing') stopAll(); else start('sing'); };
-$('sSet').onclick = openSetup;
+$('sSet').onclick = () => openSetup();
 
 const mix = document.createElement('div'); mix.id = 'smix'; mix.className = 'stuk-only'; mix.hidden = true;
 stage.append(mix);
@@ -1102,10 +1116,12 @@ function reviewAttempt(a){
   showResult(); refresh();
 }
 $('histBtn').onclick = openHist;
+$('vbBack').onclick = () => showView('A');
+$('vaCont').onclick = () => showView('B');
 
 window.NKstuk = {
   frame,
-  enter(){ medBuf = []; if (!piece && restore()) prepare(); koorAuto().then(() => { if (!piece && !sheet.hidden) renderSetup(); }); if (!piece) openSetup(); else { prepare(); refresh(); } },
+  enter(){ medBuf = []; if (!piece && restore()) prepare(); koorAuto().then(() => { if (!sheet.hidden) renderSetup(); }); openSetup('A'); },
   leave(){ stopAll(); sheet.hidden = true; hist.hidden = true; },
   _t: { parseXML, parseMidi, parseFile, reduce, evalNote, demoPiece, finishPiece, get state(){ return state; }, get run(){ return run; }, get notes(){ return notes; }, setPiece, get piece(){ return piece; } }
 };

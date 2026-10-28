@@ -182,7 +182,7 @@ $('make').onclick = async () => {
     const url = location.origin + location.pathname.replace(/beheer\.html$/, '') + '#koor=' + encodeURIComponent(st.code.trim());
     $('invite').textContent =
       'Hoi! Hier kun je thuis je stem oefenen voor ' + st.naam + ':\n' + url +
-      '\n\nOpen de link op je iPhone in Safari. Tik daarna op Deel en “Zet op beginscherm”.\nOpen de app, tik op “Stuk oefenen” en vul als dat nodig is deze koorcode in:\n' + st.code.trim() +
+      '\n\nOpen de link op je iPhone in Safari. Tik daarna op Deel en “Zet op beginscherm”.\nOpen de app, tik op “Repertoire” en vul als dat nodig is deze koorcode in:\n' + st.code.trim() +
       '\n\nGebruik bij voorkeur oordopjes.';
   } catch (e) { say('m3', 'Het maken van het pakket is mislukt.', 'bad'); }
   $('make').disabled = false;
