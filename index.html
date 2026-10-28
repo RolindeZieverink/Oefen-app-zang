@@ -1,0 +1,640 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Naklank">
+<meta name="theme-color" content="#17191c">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<title>Naklank</title>
+<style>
+:root{
+  --bg:#17191c; --row:#2a2d33; --rowb:#202328; --orange:#e8890c; --ok:#3ccf7a; --bad:#ff6b5e;
+  --ink:#eef0f6; --mute:#8d93a3; --key:#c6cadb; --panel:rgba(28,31,36,.94); --line:rgba(255,255,255,.1);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);
+  font:16px/1.35 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;
+  overflow:hidden;overscroll-behavior:none;-webkit-text-size-adjust:100%}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+#app{position:fixed;inset:0;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px)}
+#stage{position:relative;flex:1;min-height:0}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+
+/* meter bovenaan, zoals in het voorbeeld */
+#meter{position:absolute;top:10px;left:14px;width:min(52%,210px);padding:8px 12px 10px;border-radius:12px;
+  background:rgba(23,25,28,.82);border:1px solid var(--line);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+#meter .mrow{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;color:var(--mute);font-variant-numeric:tabular-nums}
+#meter b{font-size:20px;color:var(--ink);font-weight:600;min-width:3.4ch;text-align:center}
+#meter .track{position:relative;height:4px;margin-top:6px;border-radius:2px;background:rgba(255,255,255,.12)}
+#meter .mid{position:absolute;left:50%;top:-3px;width:1px;height:10px;background:rgba(255,255,255,.3)}
+#thumb{position:absolute;top:-3px;left:50%;width:22px;height:10px;margin-left:-11px;border-radius:5px;background:#e9ecf5;opacity:.35;transition:left .06s linear,background .15s}
+#meter.on #thumb{opacity:1}
+#meter.inTune #thumb{background:var(--ok)}
+
+#chip{position:absolute;top:12px;right:calc(max(64px,min(84px,20vw)) + 10px);padding:6px 11px;border-radius:999px;font-size:13px;color:var(--mute);
+  background:rgba(23,25,28,.82);border:1px solid var(--line);font-variant-numeric:tabular-nums;display:flex;gap:6px;align-items:center}
+#chip svg{width:13px;height:13px;stroke:var(--ok)}
+
+/* statuskaart */
+#card{position:absolute;left:14px;right:96px;top:86px;display:flex;gap:12px;align-items:center;padding:12px 14px;border-radius:14px;
+  background:var(--panel);border:1px solid var(--line);box-shadow:0 8px 28px rgba(0,0,0,.35)}
+#card[hidden]{display:none}
+#cardTitle{font-weight:650;font-size:17px}
+#cardSub{font-size:13px;color:var(--mute);margin-top:1px}
+#hold{height:3px;border-radius:2px;background:rgba(255,255,255,.12);margin-top:8px;overflow:hidden}
+#hold i{display:block;height:100%;width:0;background:var(--orange);transition:width .08s linear}
+.eq{display:flex;gap:3px;align-items:flex-end;height:24px;width:26px;flex:none}
+.eq i{flex:1;background:var(--orange);border-radius:2px;animation:eq 0.9s ease-in-out infinite}
+.eq i:nth-child(2){animation-delay:.15s}.eq i:nth-child(3){animation-delay:.3s}.eq i:nth-child(4){animation-delay:.45s}
+@keyframes eq{0%,100%{height:25%}50%{height:100%}}
+.mic{width:14px;height:14px;border-radius:50%;background:#ff3b30;flex:none;animation:pulse 1.2s ease-in-out infinite;margin:0 6px}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,59,48,.5)}50%{box-shadow:0 0 0 8px rgba(255,59,48,0)}}
+
+/* resultaat */
+#res{flex:none;padding:14px 16px 12px;border-radius:18px 18px 0 0;background:#22252b;
+  border-top:1px solid var(--line);box-shadow:0 -10px 24px rgba(0,0,0,.35);position:relative;z-index:2;animation:up .22s ease-out}
+#res[hidden]{display:none}
+@keyframes up{from{transform:translateY(14px);opacity:0}to{transform:none;opacity:1}}
+#res .top{display:flex;gap:14px;align-items:center}
+.badge{width:60px;height:60px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:34px;font-weight:700;line-height:1}
+.badge svg{width:34px;height:34px}
+.badge.ok{background:var(--ok);color:#06210f;animation:pop .35s cubic-bezier(.2,1.6,.4,1)}
+.badge.bad{background:var(--bad);color:#2b0a06}
+.badge.neutral{background:#4a4f5c;color:var(--ink)}
+@keyframes pop{from{transform:scale(.4)}to{transform:scale(1)}}
+#resTitle{font-size:22px;font-weight:700}
+#resDetail{font-size:14px;color:#c5c9d6;margin-top:2px}
+#resHint{font-size:13px;color:var(--mute);margin-top:10px}
+.btns{display:flex;gap:10px;margin-top:12px}
+.btn{flex:1;padding:13px 10px;border-radius:12px;font-weight:650;background:#363a43;text-align:center}
+.btn.main{background:var(--orange);color:#1c1105;flex:1.5}
+.btn.ok{background:var(--ok);color:#06210f;flex:1.5}
+.btn:active{filter:brightness(.88)}
+
+/* onderbalk */
+#bar{display:flex;align-items:center;justify-content:space-between;padding:10px 18px calc(10px + env(safe-area-inset-bottom,0px));
+  background:#1d2024;border-top:1px solid #000}
+#bar button{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;color:var(--ink)}
+#bar button svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#bar .big{width:68px;height:68px;background:var(--orange);color:#1c1105}
+#bar .big svg{width:30px;height:30px}
+#bar button:active{opacity:.7}
+#bar .lbl{font-size:11px;color:var(--mute);margin-top:-2px}
+.col{display:flex;flex-direction:column;align-items:center;gap:2px;width:72px}
+
+/* start- en instellingenschermen */
+.sheet{position:fixed;inset:0;z-index:20;background:var(--bg);overflow:auto;-webkit-overflow-scrolling:touch;
+  padding:calc(env(safe-area-inset-top,0px) + 28px) 22px calc(env(safe-area-inset-bottom,0px) + 24px)}
+.sheet[hidden]{display:none}
+.sheet .wrap{max-width:460px;margin:0 auto}
+h1{font-size:44px;letter-spacing:-.02em;margin:6px 0 4px;font-weight:750}
+h1 span{color:var(--orange)}
+.lead{color:#c5c9d6;font-size:18px;margin:0 0 22px}
+ol.steps{list-style:none;margin:0 0 24px;padding:0;display:grid;gap:12px}
+ol.steps li{display:flex;gap:14px;align-items:flex-start;color:#d7dae5;font-size:15px}
+ol.steps b{flex:none;width:28px;height:28px;border-radius:8px;background:#2b2f37;display:grid;place-items:center;font-size:14px;color:var(--orange)}
+h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin:22px 0 8px;font-weight:600}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{flex:1;min-width:64px;padding:11px 8px;border-radius:10px;background:#2b2f37;color:#c5c9d6;font-weight:600;font-size:15px}
+.seg button.on{background:var(--orange);color:#1c1105}
+.row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--line)}
+.row small{display:block;color:var(--mute);font-size:13px;margin-top:2px}
+.sw{width:52px;height:32px;border-radius:16px;background:#3a3e48;position:relative;flex:none;transition:background .15s}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:26px;height:26px;border-radius:50%;background:#fff;transition:transform .15s}
+.sw.on{background:var(--ok)}.sw.on::after{transform:translateX(20px)}
+.go{display:block;width:100%;margin-top:26px;padding:18px;border-radius:14px;background:var(--orange);color:#1c1105;font-size:19px;font-weight:700}
+.go.sec{background:#2b2f37;color:var(--ink);margin-top:14px;font-size:16px}
+.note{color:var(--mute);font-size:13px;margin-top:14px}
+#err{margin-top:16px;padding:12px 14px;border-radius:12px;background:rgba(255,107,94,.12);color:#ffb4ac;font-size:14px}
+#err[hidden]{display:none}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div id="meter"><div class="mrow"><span>−50C</span><b id="mnote">–</b><span>+50C</span></div><div class="track"><span class="mid"></span><i id="thumb"></i></div></div>
+    <div id="chip" title="In één keer goed"><svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg><span id="score">0/0</span></div>
+    <div id="card" hidden><div id="cardIcon"></div><div style="flex:1;min-width:0"><div id="cardTitle"></div><div id="cardSub"></div><div id="hold" hidden><i></i></div></div></div>
+  </div>
+  <div id="res" hidden>
+    <div class="top"><div class="badge" id="badge"></div><div style="min-width:0"><div id="resTitle"></div><div id="resDetail"></div></div></div>
+    <div id="resHint"></div>
+    <div class="btns" id="resBtns"></div>
+  </div>
+  <div id="bar">
+    <div class="col"><button id="bReplay" aria-label="Toon opnieuw horen"><svg viewBox="0 0 24 24"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7M18.5 5.5a9 9 0 010 13"/></svg></button><span class="lbl">Toon horen</span></div>
+    <div class="col"><button id="bNext" class="big" aria-label="Nieuwe toon"><svg viewBox="0 0 24 24"><path d="M5 5l9 7-9 7V5z" fill="currentColor"/><path d="M18 5v14"/></svg></button><span class="lbl">Nieuwe toon</span></div>
+    <div class="col"><button id="bSet" aria-label="Instellingen"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg></button><span class="lbl">Instellingen</span></div>
+  </div>
+</div>
+
+<!-- startscherm -->
+<div class="sheet" id="start">
+  <div class="wrap">
+    <h1>Na<span>klank</span></h1>
+    <p class="lead">Luister naar een toon en zing hem na.</p>
+    <ol class="steps">
+      <li><b>1</b><span>Je hoort een toon. Je ziet hem nog niet, dus je moet echt luisteren.</span></li>
+      <li><b>2</b><span>Je zingt de toon na. Je stem verschijnt als witte lijn boven een toetsenbord.</span></li>
+      <li><b>3</b><span>Je krijgt meteen feedback: een groen vinkje als het klopt. Zo niet, dan zie je waar je zat en waar de toon was, en probeer je het opnieuw.</span></li>
+    </ol>
+    <h2>Stemgroep</h2>
+    <div class="seg" id="voiceStart"></div>
+    <button class="go" id="goBtn">Start</button>
+    <div id="err" hidden></div>
+    <p class="note">Gebruik bij voorkeur oordopjes, dan hoort de microfoon alleen jouw stem. Sta in een rustige ruimte.</p>
+    <p class="note" id="iosTip" hidden>Tip: tik in Safari op Deel en kies “Zet op beginscherm” om dit als app te gebruiken.</p>
+  </div>
+</div>
+
+<!-- instellingen -->
+<div class="sheet" id="settings" hidden>
+  <div class="wrap">
+    <h1 style="font-size:32px">Instellingen</h1>
+    <h2>Stemgroep</h2><div class="seg" id="voiceSet"></div>
+    <h2>Hoe streng?</h2><div class="seg" id="tolSet"></div>
+    <h2>Lengte van de toon</h2><div class="seg" id="durSet"></div>
+    <h2>Opties</h2>
+    <div class="row"><div>Octaaf mag afwijken<small>Zing je dezelfde toon een octaaf hoger of lager, dan telt dat als goed.</small></div><button class="sw" id="swOct" aria-label="Octaaf mag afwijken"></button></div>
+    <div class="row"><div>Doeltoon tonen bij opnieuw proberen<small>Na een fout blijft de juiste toon op het toetsenbord zichtbaar.</small></div><button class="sw" id="swKeep" aria-label="Doeltoon tonen"></button></div>
+    <div class="row"><div>Geluidje bij goed antwoord</div><button class="sw" id="swChime" aria-label="Geluidje"></button></div>
+    <button class="go sec" id="resetScore">Score op nul zetten</button>
+    <button class="go" id="closeSet">Klaar</button>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const NN = ['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
+const nm = m => NN[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1);
+const isBlack = m => [1,3,6,8,10].includes(((m % 12) + 12) % 12);
+const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+const ftom = f => 69 + 12 * Math.log2(f / 440);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const VOICES = { sopraan:{lo:60,hi:79,label:'Sopraan'}, alt:{lo:55,hi:74,label:'Alt'}, tenor:{lo:48,hi:67,label:'Tenor'}, bas:{lo:40,hi:60,label:'Bas'} };
+const DEF = { voice:'sopraan', tol:35, octave:true, keep:true, dur:2.5, chime:true };
+
+let S = loadS();
+function loadS(){ try { return Object.assign({}, DEF, JSON.parse(localStorage.getItem('naklank') || '{}')); } catch(e){ return Object.assign({}, DEF); } }
+function saveS(){ try { localStorage.setItem('naklank', JSON.stringify(S)); } catch(e){} }
+const stats = (() => { try { return Object.assign({rounds:0, first:0}, JSON.parse(localStorage.getItem('naklank-stats') || '{}')); } catch(e){ return {rounds:0, first:0}; } })();
+function saveStats(){ try { localStorage.setItem('naklank-stats', JSON.stringify(stats)); } catch(e){} }
+
+/* ---------- audio ---------- */
+let ac = null, analyser = null, stream = null, buf = null, tone = null;
+
+async function initAudio(){
+  try { if (navigator.audioSession) navigator.audioSession.type = 'play-and-record'; } catch(e){}
+  if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
+    throw new Error('insecure');
+  ac = new (window.AudioContext || window.webkitAudioContext)();
+  try { await ac.resume(); } catch(e){}
+  stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation:false, noiseSuppression:false, autoGainControl:false } });
+  const src = ac.createMediaStreamSource(stream);
+  analyser = ac.createAnalyser();
+  analyser.fftSize = 2048;
+  analyser.smoothingTimeConstant = 0;
+  src.connect(analyser);
+  buf = new Float32Array(analyser.fftSize);
+}
+
+function stopTone(){ if (tone) { try { tone.stop(); } catch(e){} tone = null; } }
+
+function playTone(m, dur, vol){
+  return new Promise(res => {
+    stopTone();
+    try { ac.resume(); } catch(e){}
+    vol = vol || 0.5;
+    const t0 = ac.currentTime + 0.05, f = mtof(m);
+    const master = ac.createGain();
+    master.gain.setValueAtTime(0, t0);
+    master.gain.linearRampToValueAtTime(vol, t0 + 0.04);
+    master.gain.setValueAtTime(vol, t0 + Math.max(0.05, dur - 0.25));
+    master.gain.linearRampToValueAtTime(0, t0 + dur);
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3200;
+    master.connect(lp); lp.connect(ac.destination);
+    const oscs = [];
+    [[1,1],[2,.4],[3,.2],[4,.08]].forEach(([k,g]) => {
+      const o = ac.createOscillator(); o.type = 'sine'; o.frequency.value = f * k;
+      const gn = ac.createGain(); gn.gain.value = g / 1.68;
+      o.connect(gn); gn.connect(master); o.start(t0); o.stop(t0 + dur + 0.05); oscs.push(o);
+    });
+    let done = false;
+    const timer = setTimeout(fin, (dur + 0.12) * 1000);
+    function fin(){ if (done) return; done = true; clearTimeout(timer); res(); }
+    tone = { stop(){ try { master.gain.cancelScheduledValues(ac.currentTime); master.gain.setValueAtTime(0, ac.currentTime); oscs.forEach(o => o.stop()); } catch(e){} fin(); } };
+  });
+}
+
+function chime(ok){
+  if (!ac || !S.chime) return;
+  const t = ac.currentTime + 0.02;
+  (ok ? [[784,0],[1175,.11]] : []).forEach(([f,d]) => {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'sine'; o.frequency.value = f;
+    g.gain.setValueAtTime(0, t + d); g.gain.linearRampToValueAtTime(.18, t + d + .01); g.gain.exponentialRampToValueAtTime(.001, t + d + .5);
+    o.connect(g); g.connect(ac.destination); o.start(t + d); o.stop(t + d + .55);
+  });
+}
+
+/* ---------- toonhoogte-detectie (YIN) ---------- */
+const GATE = 0.006;
+const yinD = new Float32Array(1024);
+function detect(x, sr){
+  const N = x.length; let s = 0;
+  for (let i = 0; i < N; i++) s += x[i] * x[i];
+  const rms = Math.sqrt(s / N);
+  if (rms < GATE) return { voiced:false, rms };
+  const W = N >> 1;
+  const minTau = Math.max(2, Math.floor(sr / 1100));
+  const maxTau = Math.min(W - 1, Math.floor(sr / 70));
+  let run = 0; yinD[0] = 1;
+  for (let tau = 1; tau <= maxTau; tau++){
+    let sum = 0;
+    for (let j = 0; j < W; j++){ const df = x[j] - x[j + tau]; sum += df * df; }
+    run += sum; yinD[tau] = run > 0 ? sum * tau / run : 1;
+  }
+  let tau = -1;
+  for (let t = minTau; t <= maxTau; t++){
+    if (yinD[t] < 0.15){ while (t + 1 <= maxTau && yinD[t + 1] < yinD[t]) t++; tau = t; break; }
+  }
+  if (tau < 0) return { voiced:false, rms };
+  let t0 = tau;
+  if (tau > 1 && tau < maxTau){
+    const a = yinD[tau-1], b = yinD[tau], c = yinD[tau+1], den = a - 2*b + c;
+    if (den !== 0) t0 = tau + (a - c) / (2 * den);
+  }
+  return { voiced:true, rms, midi: ftom(sr / t0) };
+}
+const median = a => { const b = a.slice().sort((p,q) => p - q); return b[b.length >> 1]; };
+
+/* ---------- toestand ---------- */
+let st = 'idle';               // idle | listen | sing | result
+let target = null, attempts = 0, revealed = false, runId = 0, lastTarget = -1;
+let hist = [], med = [], seg = [], segT0 = 0, lastV = 0, singStart = 0, frozenT = 0, liveM = null, outcome = null;
+
+function pick(){
+  const v = VOICES[S.voice]; let m;
+  do { m = v.lo + Math.floor(Math.random() * (v.hi - v.lo + 1)); } while (m === lastTarget && v.hi > v.lo);
+  lastTarget = m; return m;
+}
+
+async function newRound(){
+  if (!ac) return;
+  target = pick(); attempts = 0; revealed = false; stats.rounds++; saveStats();
+  await startAttempt();
+}
+
+async function startAttempt(){
+  const id = ++runId;
+  stopTone();
+  attempts++; st = 'listen'; hist = []; med = []; seg = []; liveM = null; outcome = null;
+  ui();
+  await playTone(target, S.dur);
+  if (id !== runId) return;
+  await sleep(450);
+  if (id !== runId) return;
+  st = 'sing'; singStart = performance.now() / 1000; seg = []; med = [];
+  ui();
+}
+
+function judge(sung){
+  let dev = sung - target, oct = 0;
+  if (S.octave){
+    const d = ((dev + 6) % 12 + 12) % 12 - 6;
+    oct = Math.round((dev - d) / 12); dev = d;
+  } else {
+    // zonder octaaf-vrijheid telt het volledige verschil
+  }
+  const cents = dev * 100;
+  const ok = Math.abs(cents) <= S.tol && (S.octave || Math.abs(dev) < 6);
+  return { ok, cents, dev, oct, sung };
+}
+
+function finish(sungMidi, now){
+  const j = judge(sungMidi);
+  st = 'result'; frozenT = now; revealed = true; outcome = j;
+  if (j.ok && attempts === 1){ stats.first++; saveStats(); }
+  if (j.ok) chime(true);
+  ui(); showResult(j);
+}
+
+function failSilence(now){
+  st = 'result'; frozenT = now; outcome = { silence:true };
+  ui(); showResult(outcome);
+}
+
+function tryEval(now, final){
+  const usable = seg.filter(f => f.t >= segT0 + 0.25);
+  if (!usable.length) return false;
+  const span = usable[usable.length-1].t - usable[0].t;
+  if (final ? span < 0.45 : span < 0.75) return false;
+  const tail = usable.filter(f => f.t >= usable[usable.length-1].t - 0.5);
+  const vals = tail.map(f => f.m).sort((a,b) => a - b);
+  const spread = vals[Math.floor(vals.length * 0.9)] - vals[Math.floor(vals.length * 0.1)];
+  if (!final && spread > 0.8 && (now - segT0) < 2.4) return false;
+  finish(median(vals), now);
+  return true;
+}
+
+/* ---------- hoofdlus ---------- */
+const cv = $('cv'), ctx = cv.getContext('2d');
+let W = 0, H = 0, dpr = 1;
+function resize(){
+  const r = cv.getBoundingClientRect(); dpr = window.devicePixelRatio || 1;
+  W = r.width; H = r.height; cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+}
+new ResizeObserver(resize).observe($('stage'));
+
+function loop(){
+  requestAnimationFrame(loop);
+  const now = performance.now() / 1000;
+  if (st === 'sing' && analyser){
+    analyser.getFloatTimeDomainData(buf);
+    const r = detect(buf, ac.sampleRate);
+    let m = null;
+    if (r.voiced){ med.push(r.midi); if (med.length > 5) med.shift(); m = median(med); }
+    else { if (med.length) med.shift(); }
+    hist.push({ t: now, m });
+    while (hist.length && now - hist[0].t > 12) hist.shift();
+    liveM = m;
+    if (m != null){ if (!seg.length) segT0 = now; seg.push({ t: now, m }); lastV = now; }
+    else if (seg.length && now - lastV > 0.3){ if (!tryEval(now, true)) seg = []; }
+    if (st === 'sing' && seg.length){
+      const prog = Math.max(0, Math.min(1, (now - segT0 - 0.25) / 0.75));
+      $('hold').firstElementChild.style.width = (prog * 100) + '%';
+      if (now - segT0 >= 1.0) tryEval(now, false);
+    } else if (st === 'sing'){
+      $('hold').firstElementChild.style.width = '0%';
+      if (now - singStart > 15) failSilence(now);
+    }
+    updateMeter(liveM);
+  } else if (st !== 'sing') {
+    updateMeter(null);
+  }
+  draw(st === 'result' ? frozenT : now);
+}
+
+function updateMeter(m){
+  const mt = $('meter');
+  if (m == null){ mt.classList.remove('on','inTune'); if (st !== 'sing') $('mnote').textContent = '–'; return; }
+  const n = Math.round(m), c = (m - n) * 100;
+  $('mnote').textContent = nm(n);
+  $('thumb').style.left = (50 + c) + '%';
+  mt.classList.add('on');
+  mt.classList.toggle('inTune', Math.abs(c) < 12);
+}
+
+/* ---------- tekenen ---------- */
+function draw(now){
+  const v = VOICES[S.voice], lo = v.lo - 8, hi = v.hi + 4, n = hi - lo + 1;
+  const KW = Math.max(64, Math.min(84, W * 0.2)), gw = W - KW, rh = H / n;
+  const pxps = gw / 6;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  const rowY = m => (hi - m) * rh;
+  const centerY = m => (hi - m + 0.5) * rh;
+
+  // rijen
+  for (let m = lo; m <= hi; m++){
+    ctx.fillStyle = isBlack(m) ? '#202328' : '#2a2d33';
+    ctx.fillRect(0, rowY(m), gw, rh + 0.5);
+    const pc = ((m % 12) + 12) % 12;
+    ctx.fillStyle = (pc === 0 || pc === 5) ? 'rgba(255,255,255,.16)' : 'rgba(255,255,255,.04)';
+    ctx.fillRect(0, rowY(m) + rh - 0.5, gw, 1);
+  }
+
+  // doel
+  const showTarget = target != null && revealed && (st === 'result' || S.keep);
+  if (showTarget){
+    for (let m = lo; m <= hi; m++){
+      if (((m - target) % 12 + 12) % 12 !== 0) continue;
+      const main = m === target;
+      if (!main && !S.octave) continue;
+      ctx.fillStyle = main ? 'rgba(60,207,122,.30)' : 'rgba(60,207,122,.12)';
+      ctx.fillRect(0, rowY(m), gw, rh);
+      if (main){
+        ctx.strokeStyle = 'rgba(60,207,122,.9)'; ctx.setLineDash([6, 5]); ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(0, centerY(m)); ctx.lineTo(gw, centerY(m)); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = '#7de3a6'; ctx.font = '600 12px -apple-system,sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillText('doel ' + nm(m), 10, centerY(m) - rh * 0.0 - 0 + (rh > 22 ? 0 : -rh));
+      }
+    }
+  }
+
+  // oranje notenblokken
+  const FR = 0.05;
+  let i = 0;
+  while (i < hist.length){
+    const h = hist[i];
+    if (h.m == null){ i++; continue; }
+    const rn = Math.round(h.m); let j = i;
+    while (j + 1 < hist.length && hist[j+1].m != null && Math.round(hist[j+1].m) === rn && hist[j+1].t - hist[j].t < 0.12) j++;
+    const x0 = gw - (now - h.t) * pxps, x1 = gw - (now - hist[j].t) * pxps + Math.max(2, FR * pxps);
+    if (rn >= lo && rn <= hi && x1 > 0){
+      ctx.fillStyle = '#e8890c'; ctx.fillRect(Math.max(0, x0), rowY(rn), Math.min(gw, x1) - Math.max(0, x0), rh);
+    }
+    i = j + 1;
+  }
+
+  // witte lijn van de stem
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.beginPath(); let pen = false, prevT = 0;
+  for (const h of hist){
+    if (h.m == null){ pen = false; continue; }
+    const x = gw - (now - h.t) * pxps; if (x < -4) { pen = false; continue; }
+    const mm = Math.max(lo - 0.5, Math.min(hi + 0.5, h.m)), y = centerY(mm);
+    if (!pen || h.t - prevT > 0.12){ ctx.moveTo(x, y); pen = true; } else ctx.lineTo(x, y);
+    prevT = h.t;
+  }
+  ctx.stroke();
+
+  // verschilpijl na een fout
+  if (st === 'result' && outcome && !outcome.silence && !outcome.ok && target != null){
+    const tShown = target + 12 * (outcome.oct || 0);
+    const ty = centerY(Math.max(lo, Math.min(hi, tShown))), sy = centerY(Math.max(lo - .5, Math.min(hi + .5, outcome.sung)));
+    const x = gw - 16;
+    ctx.strokeStyle = '#ff6b5e'; ctx.fillStyle = '#ff6b5e'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(x, sy); ctx.lineTo(x, ty); ctx.stroke();
+    const dir = ty < sy ? -1 : 1;
+    ctx.beginPath(); ctx.moveTo(x, ty); ctx.lineTo(x - 7, ty - dir * 11); ctx.lineTo(x + 7, ty - dir * 11); ctx.closePath(); ctx.fill();
+  }
+
+  // pianotoetsen
+  const cur = st === 'sing' && liveM != null ? Math.round(liveM) : (st === 'result' && outcome && !outcome.silence ? Math.round(outcome.sung) : null);
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  ctx.font = '600 ' + Math.max(10, Math.min(15, rh * 0.62)) + 'px -apple-system,sans-serif';
+  for (let m = lo; m <= hi; m++){
+    const y = rowY(m);
+    if (isBlack(m)){ ctx.fillStyle = '#17191c'; ctx.fillRect(gw, y, KW, rh + 0.5); continue; }
+    let fill = '#c6cadb';
+    if (showTarget && m === target) fill = '#3ccf7a';
+    else if (cur === m) fill = '#e8890c';
+    ctx.fillStyle = fill; ctx.fillRect(gw, y, KW, rh + 0.5);
+    ctx.fillStyle = 'rgba(30,32,40,.55)'; ctx.fillRect(gw, y, KW, 1);
+    ctx.fillStyle = (fill === '#c6cadb') ? '#3b3f4d' : '#10130f';
+    ctx.fillText(nm(m), W - 9, y + rh / 2 + 0.5);
+  }
+  if (showTarget && cur != null && outcome && !outcome.ok && cur !== target && cur >= lo && cur <= hi){
+    // de gezongen toets blijft oranje zichtbaar (al getekend), niets extra's
+  }
+  ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(gw - 0.5, 0, 1, H);
+}
+
+/* ---------- UI ---------- */
+const svgCheck = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
+const svgUp = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V5M5.5 11.5L12 5l6.5 6.5"/></svg>';
+const svgDown = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v15M5.5 12.5L12 19l6.5-6.5"/></svg>';
+
+function ui(){
+  const card = $('card'), res = $('res');
+  $('score').textContent = stats.first + '/' + stats.rounds;
+  if (st === 'listen'){
+    res.hidden = true; card.hidden = false;
+    $('cardIcon').innerHTML = '<div class="eq"><i></i><i></i><i></i><i></i></div>';
+    $('cardTitle').textContent = 'Luister goed';
+    $('cardSub').textContent = attempts > 1 ? 'Dezelfde toon nog een keer' : 'Je hoort een toon';
+    $('hold').hidden = true;
+  } else if (st === 'sing'){
+    res.hidden = true; card.hidden = false;
+    $('cardIcon').innerHTML = '<div class="mic"></div>';
+    $('cardTitle').textContent = 'Zing de toon na';
+    $('cardSub').textContent = 'Houd de toon even vast';
+    $('hold').hidden = false; $('hold').firstElementChild.style.width = '0%';
+  } else { card.hidden = true; }
+}
+
+function btn(label, cls, fn){ const b = document.createElement('button'); b.className = 'btn ' + cls; b.textContent = label; b.onclick = fn; return b; }
+
+function showResult(j){
+  const res = $('res'), badge = $('badge'), t = $('resTitle'), d = $('resDetail'), hint = $('resHint'), bt = $('resBtns');
+  bt.innerHTML = ''; hint.textContent = '';
+  if (j.silence){
+    badge.className = 'badge neutral'; badge.textContent = '?';
+    t.textContent = 'Ik hoor je niet'; d.textContent = 'Zing wat luider of dichter bij de microfoon.';
+    bt.append(btn('Opnieuw', 'main', () => startAttempt()), btn('Andere toon', '', newRound));
+  } else if (j.ok){
+    badge.className = 'badge ok'; badge.innerHTML = svgCheck;
+    const ac_ = Math.abs(j.cents);
+    t.textContent = ac_ <= 12 ? 'Zuiver!' : 'Goed zo!';
+    let det = 'Je zong ' + nm(target);
+    if (ac_ > 12) det += ', iets ' + (j.cents > 0 ? 'hoog' : 'laag') + ' (' + (j.cents > 0 ? '+' : '−') + Math.round(ac_) + ' cent)';
+    d.textContent = det + '.';
+    if (j.oct) hint.textContent = 'Dat was ' + (Math.abs(j.oct) > 1 ? Math.abs(j.oct) + ' octaven' : 'een octaaf') + (j.oct < 0 ? ' lager' : ' hoger') + ' dan het voorbeeld. Dat telt mee.';
+    else hint.textContent = attempts > 1 ? 'Gelukt na ' + attempts + ' pogingen.' : 'In één keer goed.';
+    bt.append(btn('Toon horen', '', async () => { await playTone(target, S.dur); }), btn('Volgende toon', 'ok', newRound));
+  } else {
+    const absC = Math.abs(j.cents), needHigher = j.dev < 0;
+    badge.className = 'badge bad'; badge.innerHTML = needHigher ? svgUp : svgDown;
+    const semis = Math.round(Math.abs(j.dev));
+    if (absC < 100){
+      t.textContent = 'Bijna!';
+      d.textContent = 'Je zat iets te ' + (needHigher ? 'laag' : 'hoog') + ' (' + (j.cents > 0 ? '+' : '−') + Math.round(absC) + ' cent).';
+      hint.textContent = 'Zing een fractie ' + (needHigher ? 'hoger' : 'lager') + '.';
+    } else {
+      t.textContent = 'Nog niet helemaal';
+      d.textContent = 'Je zong ' + nm(Math.round(j.sung)) + '. De toon was ' + nm(target) + '.';
+      hint.textContent = 'Zing ' + semis + ' halve toon' + (semis === 1 ? '' : 'en') + ' ' + (needHigher ? 'hoger' : 'lager') + '. Tik op een toets om hem te horen.';
+    }
+    if (!S.octave && Math.abs(j.dev) >= 6) {
+      const o = Math.round(j.dev / 12);
+      if (o) { d.textContent = 'Je zong een octaaf te ' + (o > 0 ? 'hoog' : 'laag') + '.'; }
+    }
+    bt.append(btn('Andere toon', '', newRound), btn('Probeer opnieuw', 'main', () => startAttempt()));
+  }
+  res.hidden = false;
+}
+
+/* tik op een pianotoets om hem te horen (alleen na het antwoord) */
+cv.addEventListener('pointerdown', e => {
+  if (st !== 'result' || !ac) return;
+  const r = cv.getBoundingClientRect(), KW = Math.max(64, Math.min(84, r.width * 0.2));
+  const x = e.clientX - r.left, y = e.clientY - r.top;
+  if (x < r.width - KW) return;
+  const v = VOICES[S.voice], lo = v.lo - 8, hi = v.hi + 4, n = hi - lo + 1;
+  const m = hi - Math.floor(y / (r.height / n));
+  if (m >= lo && m <= hi) playTone(m, 1.1, 0.45);
+});
+
+/* ---------- knoppen ---------- */
+$('bReplay').onclick = () => { if (ac && target != null) startAttempt(); };
+$('bNext').onclick = () => { if (ac) newRound(); };
+$('bSet').onclick = () => { openSettings(); };
+
+function seg_(el, items, cur, on){
+  el.innerHTML = '';
+  items.forEach(([val, label]) => {
+    const b = document.createElement('button'); b.textContent = label;
+    if (val === cur) b.className = 'on';
+    b.onclick = () => { on(val); seg_(el, items, val, on); };
+    el.append(b);
+  });
+}
+const voiceItems = Object.keys(VOICES).map(k => [k, VOICES[k].label]);
+function renderVoice(el){ seg_(el, voiceItems, S.voice, v => { S.voice = v; saveS(); lastTarget = -1; }); }
+function renderSettings(){
+  renderVoice($('voiceSet'));
+  seg_($('tolSet'), [[20,'Streng ±20'],[35,'Normaal ±35'],[50,'Ruim ±50']], S.tol, v => { S.tol = v; saveS(); });
+  seg_($('durSet'), [[1.5,'Kort'],[2.5,'Normaal'],[4,'Lang']], S.dur, v => { S.dur = v; saveS(); });
+  $('swOct').classList.toggle('on', S.octave);
+  $('swKeep').classList.toggle('on', S.keep);
+  $('swChime').classList.toggle('on', S.chime);
+}
+let settingsFrom = null;
+function openSettings(){ stopTone(); runId++; settingsFrom = st; if (st === 'listen' || st === 'sing') st = 'idle'; renderSettings(); $('settings').hidden = false; ui(); }
+$('closeSet').onclick = () => {
+  $('settings').hidden = true;
+  if (ac) { // na het aanpassen start een nieuwe ronde, zodat stemgroep en toon kloppen
+    newRound();
+  }
+};
+[['swOct','octave'],['swKeep','keep'],['swChime','chime']].forEach(([id, key]) => {
+  $(id).onclick = () => { S[key] = !S[key]; saveS(); renderSettings(); };
+});
+$('resetScore').onclick = () => { stats.rounds = 0; stats.first = 0; saveStats(); $('score').textContent = '0/0'; };
+
+renderVoice($('voiceStart'));
+$('goBtn').onclick = async () => {
+  const err = $('err'); err.hidden = true;
+  try {
+    await initAudio();
+  } catch (e) {
+    err.hidden = false;
+    if (e && e.message === 'insecure') err.textContent = 'De microfoon werkt alleen als de app via een beveiligd adres (https) is geopend.';
+    else if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) err.textContent = 'De microfoon is geweigerd. Zet hem aan via Instellingen › Safari › Microfoon (of voor deze app) en probeer opnieuw.';
+    else if (e && e.name === 'NotFoundError') err.textContent = 'Er is geen microfoon gevonden op dit apparaat.';
+    else err.textContent = 'De microfoon kon niet starten. Sluit de app helemaal af en probeer opnieuw.';
+    return;
+  }
+  $('start').hidden = true;
+  newRound();
+};
+
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+const standalone = window.navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+if (isIOS && !standalone) $('iosTip').hidden = false;
+
+document.addEventListener('visibilitychange', () => { if (!document.hidden && ac) { try { ac.resume(); } catch(e){} } });
+
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')){
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+// hulp bij testen
+window.__nk = { setTarget(m){ target = m; }, get st(){ return st; }, get outcome(){ return outcome; } };
+
+resize(); ui(); requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
