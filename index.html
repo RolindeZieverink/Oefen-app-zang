@@ -359,7 +359,8 @@ new ResizeObserver(resize).observe($('stage'));
 function loop(){
   requestAnimationFrame(loop);
   const now = performance.now() / 1000;
-  if (st === 'sing' && analyser){
+  const keepGoing = st === 'result' && outcome && outcome.ok;   // na een goed antwoord mag je doorzingen
+  if ((st === 'sing' || keepGoing) && analyser){
     analyser.getFloatTimeDomainData(buf);
     const r = detect(buf, ac.sampleRate);
     let m = null;
@@ -368,8 +369,10 @@ function loop(){
     hist.push({ t: now, m });
     while (hist.length && now - hist[0].t > 12) hist.shift();
     liveM = m;
-    if (m != null){ if (!seg.length) segT0 = now; seg.push({ t: now, m }); lastV = now; }
-    else if (seg.length && now - lastV > 0.3){ if (!tryEval(now, true)) seg = []; }
+    if (st === 'sing'){
+      if (m != null){ if (!seg.length) segT0 = now; seg.push({ t: now, m }); lastV = now; }
+      else if (seg.length && now - lastV > 0.3){ if (!tryEval(now, true)) seg = []; }
+    }
     if (st === 'sing' && seg.length){
       const prog = Math.max(0, Math.min(1, (now - segT0 - 0.25) / 0.75));
       $('hold').firstElementChild.style.width = (prog * 100) + '%';
@@ -382,7 +385,7 @@ function loop(){
   } else if (st !== 'sing') {
     updateMeter(null);
   }
-  draw(st === 'result' ? frozenT : now);
+  draw(st === 'result' && !keepGoing ? frozenT : now);
 }
 
 function updateMeter(m){
@@ -474,7 +477,7 @@ function draw(now){
   ctx.restore();
 
   // pianotoetsen (links)
-  const cur = st === 'sing' && liveM != null ? Math.round(liveM) : (st === 'result' && outcome && !outcome.silence ? Math.round(outcome.sung) : null);
+  const cur = st === 'sing' && liveM != null ? Math.round(liveM) : (st === 'result' && outcome && !outcome.silence ? (outcome.ok ? (liveM != null ? Math.round(liveM) : null) : Math.round(outcome.sung)) : null);
   ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
   ctx.font = '600 ' + Math.max(10, Math.min(15, rh * 0.62)) + 'px -apple-system,sans-serif';
   for (let m = lo; m <= hi; m++){
