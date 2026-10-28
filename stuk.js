@@ -285,6 +285,7 @@ function reduce(arr){
 
 const labelToIdx = lab => { const i = piece.measures.findIndex(m => m.label === lab); return i < 0 ? 0 : i; };
 function prepare(){
+  idleT = null;
   notes = piece ? reduce(piece.parts[partIdx].notes) : [];
 }
 function secOf(b){
@@ -294,8 +295,8 @@ function secOf(b){
 function bpmAt(b){ const t = piece.tmap; let k = t.length - 1; while (k > 0 && t[k].b > b + 1e-9) k--; return t[k].bpm; }
 function sigAt(mi){ let r = piece.time[0]; for (const t of piece.time) if (t[0] <= mi) r = t; return r; }
 
-function buildRun(kind){
-  const i0 = labelToIdx(from), i1 = Math.max(i0, labelToIdx(to));
+function buildRun(kind, f0, t0){
+  const i0 = labelToIdx(f0 != null ? f0 : from), i1 = Math.max(i0, labelToIdx(t0 != null ? t0 : to));
   const bS = piece.measures[i0].b, bE = piece.measures[i1].b + piece.measures[i1].len;
   const sp = O.speed, s0 = secOf(bS);
   const sec = b => (secOf(b) - s0) / sp;
@@ -443,9 +444,9 @@ function frame(ctx, W, H, dpr){
     if ((state === 'sing' || state === 'listen') && now - run.t0 > run.dur + (run.kind === 'sing' ? 0.9 : 0.4)) finish();
   }
   if (run && state === 'done') pan = Math.max(-1 - run.frozen, Math.min(0.4, pan));
-  // in rust: laat meteen de eerste noten zien (ook als de stem eerst rust heeft)
+  // in rust: het hele stuk, te verschuiven; begint bij de gekozen maat
   let idleM = -0.6;
-  if (!run && piece && notes.length){ const pv = buildRunPreview(); if (pv.notes.length){ if (pv.first == null) pv.first = Math.min(...pv.notes.map(n => n.s)); idleM = Math.max(-0.6, pv.first - 1.2); } }
+  if (!run && piece && notes.length){ const rv = buildRunView(); if (idleT == null) idleT = initIdleT(rv); idleM = idleT; }
   const mnow = !run ? idleM : (state === 'done' ? run.frozen + pan : now - run.t0);
 
   // toonbereik van deze stem
@@ -466,7 +467,7 @@ function frame(ctx, W, H, dpr){
 
   // maatstrepen
   if (piece && notes.length){
-    const rn = run || buildRunPreview();
+    const rn = run || buildRunView();
     ctx.font = '600 11px -apple-system,sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
     for (let i = rn.i0; i <= rn.i1; i++){
       const ms = piece.measures[i], x = phX + (rn.sec(ms.b) - mnow) * pxps;
@@ -543,6 +544,18 @@ function sample(now){
   sungM = m;
   if (run) run.frames.push({ t: now, m });
 }
+let viewRun = null, viewKey = '', idleT = null;
+function buildRunView(){
+  const key = [piece.title, partIdx, O.speed, O.chord].join('|');
+  if (key !== viewKey){ viewRun = buildRun('listen', piece.measures[0].label, piece.measures[piece.measures.length - 1].label); viewKey = key; idleT = null; }
+  return viewRun;
+}
+function startOfFrom(rv){ return rv.sec(piece.measures[labelToIdx(from)].b); }
+function initIdleT(rv){
+  const st = startOfFrom(rv); let first = null;
+  for (const n of rv.notes) if (n.s >= st - 1e-6 && (first == null || n.s < first)) first = n.s;
+  return st + Math.max(-0.6, first == null ? -0.6 : first - st - 1.2);
+}
 let previewRun = null, previewKey = '';
 function buildRunPreview(){
   const key = [piece.title, partIdx, from, to, O.speed, O.chord].join('|');
@@ -604,7 +617,10 @@ body.stuk #bar,body.stuk #res,body.stuk #card,body.stuk #meter,body.stuk #chip{d
 .qb button{padding:9px 12px;border-radius:10px;background:#363a43;font-size:13px;font-weight:600}
 #nav{display:flex;gap:8px;margin-top:10px}
 #snone{position:absolute;left:calc(var(--kw) + 16px);right:16px;top:30%;padding:16px;border-radius:14px;background:rgba(23,25,28,.95);border:1px solid var(--line);z-index:4;text-align:center;font-size:15px;color:#e6e8f0}
-#snone[hidden]{display:none}
+#snone[hidden],#vaCont[hidden]{display:none!important}
+#snone{pointer-events:none}#snone button{pointer-events:auto}
+#shint{position:absolute;left:calc(var(--kw) + 10px);right:10px;bottom:10px;text-align:center;font-size:12px;color:var(--mute);background:rgba(23,25,28,.8);border-radius:999px;padding:6px 10px;pointer-events:none;z-index:3}
+#shint[hidden]{display:none}
 .prog{margin-top:10px}
 .mstrip{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}
 .mc{min-width:28px;padding:5px 4px;border-radius:7px;font-size:11px;font-weight:650;text-align:center;background:#3a3e48;color:#aab0c0;cursor:pointer;user-select:none}
@@ -624,6 +640,7 @@ const stage = $('stage'), app = $('app');
 const head = document.createElement('div'); head.id = 'shead'; head.className = 'stuk-only';
 head.innerHTML = '<div class="a" id="sheadA"></div><div class="b" id="sheadB"></div>'; stage.append(head);
 
+const shint = document.createElement('div'); shint.id = 'shint'; shint.className = 'stuk-only'; shint.textContent = '← Sleep om naar een andere maat te gaan →'; shint.hidden = true; stage.append(shint);
 const sno = document.createElement('div'); sno.id = 'snone'; sno.className = 'stuk-only'; sno.hidden = true; stage.append(sno);
 const sres = document.createElement('div'); sres.id = 'sres'; sres.className = 'stuk-only'; sres.hidden = true;
 sres.innerHTML = '<div class="top"><div class="badge" id="sbadge"></div><div style="min-width:0"><div id="stitle"></div><div id="sdetail"></div></div></div><div id="sissues"></div><div class="btns" id="sbtns"></div>';
@@ -641,25 +658,25 @@ const sheet = document.createElement('div'); sheet.className = 'sheet stuk-only'
 sheet.innerHTML = `<div class="wrap">
 <div id="vA">
 <h1 style="font-size:32px">Repertoire</h1>
-<div class="small">Kies eerst een stuk om te oefenen.</div>
 <button class="go" id="vaCont" hidden style="margin-top:14px"></button>
-<h2>Mijn koor</h2>
 <div id="koorOut">
+  <h2>Log in met je koorcode</h2>
   <input id="koorCode" type="text" placeholder="Koorcode" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false">
   <button class="go sec" id="koorGo" style="margin-top:10px">Open mijn koor</button>
   <div class="small">De code heb je van je dirigent gekregen.</div>
 </div>
 <div id="koorIn" hidden>
-  <div id="koorNaam" style="font-size:18px;font-weight:650"></div>
-  <div id="koorList" style="display:grid;gap:8px;margin-top:10px"></div>
-  <button class="btn" id="koorUit" style="margin-top:12px;flex:none;padding:10px 14px">Uitloggen</button>
+  <h2 id="koorNaam"></h2>
+  <div id="koorList" style="display:grid;gap:10px"></div>
+  <button class="btn" id="koorUit" style="margin-top:14px;flex:none;padding:10px 14px">Uitloggen</button>
 </div>
 <div id="koorMsg" class="small"></div>
-<h2>Of een eigen bestand</h2>
-<label class="go sec" id="fileLbl" style="margin-top:0">Kies MusicXML of MIDI<input id="fileIn" type="file" multiple style="display:none"></label>
+<details id="eigen" style="margin-top:26px"><summary style="color:var(--mute);font-size:14px;cursor:pointer">Eigen bestand of voorbeeld</summary>
+<label class="go sec" id="fileLbl" style="margin-top:12px">Kies MusicXML of MIDI<input id="fileIn" type="file" multiple style="display:none"></label>
 <label class="go sec" id="fileLbl2" style="margin-top:10px">Voeg nog bestanden toe (bijvoorbeeld een andere stem)<input id="fileAdd" type="file" multiple style="display:none"></label>
 <div class="small">Je kunt één bestand met alle stemmen kiezen, of meerdere bestanden tegelijk, bijvoorbeeld één MIDI per stem. De bestandsnaam wordt dan de naam van de stem.</div>
 <button class="go sec" id="demoBtn" style="margin-top:10px">Voorbeeldmelodie laden</button>
+</details>
 <div id="sstatus"></div>
 </div>
 <div id="vB" hidden>
@@ -793,7 +810,7 @@ function renderKoor(){
   if (!koor.idx.stukken.length) l.innerHTML = '<div class="small">Er staan nog geen stukken klaar.</div>';
   koor.idx.stukken.forEach(st => {
     const b = document.createElement('button'); b.className = 'kstuk'; b.type = 'button';
-    b.innerHTML = '<span><b>' + esc(st.titel) + '</b><small>' + st.bestanden.length + (st.bestanden.length === 1 ? ' bestand' : ' bestanden') + '</small></span><span style="color:var(--orange);font-weight:650">Openen</span>';
+    b.innerHTML = '<span><b style="font-size:17px">' + esc(st.titel) + '</b></span><span style="color:var(--orange);font-weight:700;font-size:20px">›</span>';
     b.onclick = () => koorLoad(st);
     l.append(b);
   });
@@ -869,6 +886,7 @@ function updateNone(){
 }
 function updateHead(){
   updateNone();
+  { const h = $('shint'); if (h) h.hidden = !(piece && state === 'idle' && !run && notes.length); }
   const a = $('sheadA'), b = $('sheadB');
   if (!piece){ a.textContent = 'Geen stuk geladen'; b.textContent = ''; return; }
   const names = partNames();
@@ -987,19 +1005,34 @@ function showResult(){
 
 let drag = null;
 cvEl.addEventListener('pointerdown', e => {
-  if (!document.body.classList.contains('stuk') || state !== 'done' || !geom) return;
-  drag = { x: e.clientX, y: e.clientY, pan0: pan, moved: false };
+  if (!document.body.classList.contains('stuk') || !geom) return;
+  const idle = state === 'idle' && !run && piece && notes.length;
+  if (state !== 'done' && !idle) return;
+  drag = { x: e.clientX, y: e.clientY, pan0: pan, t0: idleT, idle, moved: false };
   try { cvEl.setPointerCapture(e.pointerId); } catch(_){}
 });
 cvEl.addEventListener('pointermove', e => {
   if (!drag || !geom) return;
   const dx = e.clientX - drag.x;
   if (Math.abs(dx) > 4) drag.moved = true;
-  if (drag.moved) pan = drag.pan0 - dx / geom.pxps;
+  if (!drag.moved) return;
+  if (drag.idle){ const rv = buildRunView(); idleT = Math.max(-1, Math.min(rv.dur, (drag.t0 == null ? 0 : drag.t0) - dx / geom.pxps)); }
+  else pan = drag.pan0 - dx / geom.pxps;
 });
+// na het loslaten: kies de maat die het dichtst bij de afspeellijn ligt als beginmaat
+function snapToMeasure(){
+  const rv = buildRunView(); let best = 0, bd = 1e9;
+  piece.measures.forEach((ms, i) => { const d = Math.abs(rv.sec(ms.b) - (idleT + 0.6)); if (d < bd){ bd = d; best = i; } });
+  const lab = piece.measures[best].label, last = piece.measures[piece.measures.length - 1].label;
+  from = lab; if (to < from) to = last;
+  previewKey = ''; savePiece();
+  idleT = rv.sec(piece.measures[best].b) - 0.6;
+  updateHead(); updateNone();
+}
 cvEl.addEventListener('pointerup', e => {
   if (!drag || !geom){ drag = null; return; }
   const d = drag; drag = null;
+  if (d.idle){ if (d.moved) snapToMeasure(); return; }
   if (d.moved || !run) return;
   const r = cvEl.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, g = geom;
   const m = g.hi - Math.floor(y / g.rh);
