@@ -238,7 +238,7 @@ let state = 'idle';     // idle | count | listen | sing | done
 let run = null;
 let pan = 0, sel = null, geom = null;   // terugkijken na afloop
 
-function loadO(){ try { return Object.assign({}, DEF, (JSON.parse(localStorage.getItem(LS) || '{}').o) || {}); } catch(e){ return Object.assign({}, DEF); } }
+function loadO(){ let o; try { o = Object.assign({}, DEF, (JSON.parse(localStorage.getItem(LS) || '{}').o) || {}); } catch(e){ o = Object.assign({}, DEF); } o.hide = false; return o; }   // noten verbergen staat bij elke start weer uit
 function savePiece(){
   try {
     const pcs = piece ? { title: piece.title,
@@ -665,7 +665,7 @@ sheet.innerHTML = `<div class="wrap">
 <div class="small">Heeft een stem op één moment twee noten, dan oefen je de bovenste of onderste.</div>
 <div class="small" style="margin-top:14px">Het volume van elke stem stel je in met de knop “Mixer” onderin het scherm. Gebruik oordopjes als er stemmen meespelen tijdens het zingen.</div>
 <h2>Opties</h2>
-<div class="row"><div>Noten verbergen tijdens het zingen<small>Je ziet de noten pas nadat je ze gezongen hebt.</small></div><button class="sw" id="swHide" aria-label="Noten verbergen"></button></div>
+<div class="row"><div>Noten verbergen tijdens het zingen<small>Je ziet de noten pas nadat je ze gezongen hebt. Staat bij het opstarten altijd uit.</small></div><button class="sw" id="swHide" aria-label="Noten verbergen"></button></div>
 <div class="row"><div>Klik tijdens het zingen</div><button class="sw" id="swClick" aria-label="Klik"></button></div>
 <button class="go" id="sDone">Klaar</button>
 </div>`;
