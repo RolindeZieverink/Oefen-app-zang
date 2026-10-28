@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Naklank beheer</title>
+<style>
+:root{--bg:#17191c;--card:#22252b;--line:rgba(255,255,255,.1);--ink:#eef0f6;--mute:#8d93a3;--orange:#e8890c;--ok:#3ccf7a;--bad:#ff6b5e}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;padding:24px 16px 60px}
+.wrap{max-width:680px;margin:0 auto;display:grid;gap:18px}
+h1{font-size:30px;margin:0}
+h1 span{color:var(--orange)}
+h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin:0 0 12px;font-weight:600}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px}
+label{display:block;font-size:14px;color:#c5c9d6;margin:12px 0 6px}
+input[type=text]{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:#2b2f37;color:var(--ink);font:inherit}
+button,.btn{font:inherit;color:var(--ink);background:#363a43;border:0;border-radius:10px;padding:11px 16px;font-weight:650;cursor:pointer}
+button.main{background:var(--orange);color:#1c1105}
+button:disabled{opacity:.45;cursor:default}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+.row>input{flex:1;min-width:180px}
+.mute{color:var(--mute);font-size:14px}
+.msg{margin-top:12px;font-size:14px}
+.msg.ok{color:var(--ok)} .msg.bad{color:var(--bad)}
+.stuk{border-top:1px solid var(--line);padding:12px 0;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.stuk:first-child{border-top:0}
+.stuk b{display:block}
+.stuk small{color:var(--mute);display:block;font-size:13px}
+.tag{display:inline-block;font-size:12px;padding:2px 8px;border-radius:999px;background:#2f333b;color:var(--mute);margin-left:6px}
+.tag.new{background:rgba(60,207,122,.18);color:var(--ok)}
+pre{white-space:pre-wrap;word-break:break-word;background:#17191c;border:1px solid var(--line);border-radius:10px;padding:12px;font:13px/1.5 ui-monospace,Menlo,monospace;margin:10px 0 0}
+code{font-family:ui-monospace,Menlo,monospace;background:#17191c;padding:1px 6px;border-radius:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <h1>Na<span>klank</span> beheer</h1>
+    <p class="mute">Hier zet je stukken klaar voor een koor. Alles wordt in je browser versleuteld. De koorcode en de bestanden verlaten deze pagina niet.</p>
+  </div>
+
+  <div class="card" id="c1">
+    <h2>1. Koor</h2>
+    <label for="naam">Naam van het koor</label>
+    <input type="text" id="naam" placeholder="Bijvoorbeeld: Rockkoor Shout!" autocomplete="off">
+    <label for="code">Koorcode</label>
+    <div class="row" style="margin-top:0">
+      <input type="text" id="code" placeholder="Bijvoorbeeld: K7QX-M2PA-9TWD-4HRB" autocapitalize="off" autocomplete="off" spellcheck="false">
+      <button id="gen" type="button">Maak een code</button>
+    </div>
+    <div class="mute" style="margin-top:6px">Gebruik minstens 12 tekens. Een gegenereerde code is het veiligst. Schrijf hem op: zonder de code kun je de stukken niet meer wijzigen.</div>
+    <div class="row"><button class="main" id="open" type="button">Koor starten of openen</button></div>
+    <div class="msg" id="m1"></div>
+  </div>
+
+  <div class="card" id="c2" hidden>
+    <h2>2. Stukken</h2>
+    <div id="lijst"></div>
+    <div style="border-top:1px solid var(--line);margin-top:6px;padding-top:6px">
+      <label for="titel">Titel van het nieuwe stuk</label>
+      <input type="text" id="titel" placeholder="Bijvoorbeeld: The Seed" autocomplete="off">
+      <label for="files">Bestanden (MusicXML of MIDI, ook meerdere tegelijk)</label>
+      <input type="file" id="files" multiple style="color:var(--mute)">
+      <div class="mute" style="margin-top:6px">Is er één bestand met alle stemmen, kies dan dat bestand. Zijn er aparte MIDI's per stem, kies ze allemaal. De bestandsnaam wordt de naam van de stem, bijvoorbeeld “The Seed - Alt.mid”.</div>
+      <div class="row"><button id="add" type="button">Stuk toevoegen</button></div>
+      <div class="msg" id="m2"></div>
+    </div>
+  </div>
+
+  <div class="card" id="c3" hidden>
+    <h2>3. Pakket maken</h2>
+    <div class="mute">Je krijgt versleutelde bestanden. Zet ze in de map <code>koren</code> van je app (die in je GitHub-repository staat). De app haalt ze daar zelf op.</div>
+    <div class="row"><button class="main" id="make" type="button">Maak pakket</button></div>
+    <div class="msg" id="m3"></div>
+    <div id="out" hidden>
+      <div class="row">
+        <button id="dir" type="button" hidden>Zet direct in mijn app-map</button>
+        <button id="zip" type="button">Download als zip</button>
+      </div>
+      <p class="mute" id="uitleg"></p>
+      <h2 style="margin-top:18px">Bericht voor je koor</h2>
+      <pre id="invite"></pre>
+      <div class="row"><button id="copy" type="button">Kopieer bericht</button></div>
+    </div>
+  </div>
+
+  <p class="mute">Let op: zet alleen stukken online waarvoor jij en je koor toestemming hebben. Deze pagina is openbaar, maar zonder de koorcode is er niets te zien. Er kan hier niets mee worden gewijzigd.</p>
+</div>
+
+<script src="koor.js"></script>
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const K = window.NKkoor, enc = new TextEncoder(), dec = new TextDecoder();
+let st = null;       // { naam, code, d:{id,key}, stukken:[{id,titel,bestanden:[{id,naam,bytes?}]}] }
+let pkg = null;      // [{path, bytes}]
+
+const rid = () => [...crypto.getRandomValues(new Uint8Array(8))].map(b => b.toString(16).padStart(2, '0')).join('');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+const say = (id, t, cls) => { const e = $(id); e.textContent = t; e.className = 'msg' + (cls ? ' ' + cls : ''); };
+
+function genCode(){
+  const A = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; let s = '';
+  while (s.length < 16){ const b = crypto.getRandomValues(new Uint8Array(1))[0]; if (b < 248) s += A[b % A.length]; }
+  return s.match(/.{4}/g).join('-');
+}
+$('gen').onclick = () => { $('code').value = genCode(); };
+
+$('open').onclick = async () => {
+  const naam = $('naam').value.trim(), code = $('code').value;
+  if (!naam) return say('m1', 'Vul de naam van het koor in.', 'bad');
+  if (K.norm(code).length < 12) return say('m1', 'De code is te kort. Gebruik minstens 12 tekens.', 'bad');
+  say('m1', 'Bezig…'); $('open').disabled = true;
+  try {
+    const d = await K.derive(code);
+    st = { naam, code, d, stukken: [] };
+    let bestaand = false;
+    try {
+      const r = await fetch('koren/' + d.id + '/index.nk', { cache: 'no-cache' });
+      if (r.ok){
+        const idx = JSON.parse(dec.decode(await K.decrypt(d.key, await r.arrayBuffer())));
+        st.naam = idx.koor || naam; $('naam').value = st.naam;
+        st.stukken = (idx.stukken || []).map(s => ({ id: s.id, titel: s.titel, bestanden: s.bestanden.map(b => ({ id: b.id, naam: b.naam })) }));
+        bestaand = true;
+      }
+    } catch (e) { /* nog niet gepubliceerd of lokaal geopend: dan starten we met een leeg koor */ }
+    say('m1', bestaand ? 'Bestaand koor geopend met ' + st.stukken.length + (st.stukken.length === 1 ? ' stuk.' : ' stukken.') : 'Nieuw koor. Voeg hieronder stukken toe.', 'ok');
+    $('c2').hidden = false; $('c3').hidden = false; $('out').hidden = true; render();
+  } catch (e) { say('m1', 'Er ging iets mis bij het klaarmaken van de code.', 'bad'); }
+  $('open').disabled = false;
+};
+
+function render(){
+  const l = $('lijst'); l.innerHTML = '';
+  if (!st.stukken.length) l.innerHTML = '<div class="mute">Nog geen stukken.</div>';
+  st.stukken.forEach((s, i) => {
+    const nieuw = s.bestanden.some(b => b.bytes);
+    const el = document.createElement('div'); el.className = 'stuk';
+    el.innerHTML = '<div><b>' + esc(s.titel) + (nieuw ? '<span class="tag new">nieuw</span>' : '<span class="tag">staat al online</span>') + '</b><small>' + s.bestanden.map(b => esc(b.naam)).join(', ') + '</small></div>';
+    const x = document.createElement('button'); x.textContent = 'Verwijder'; x.type = 'button';
+    x.onclick = () => { st.stukken.splice(i, 1); render(); };
+    el.append(x); l.append(el);
+  });
+}
+
+$('add').onclick = async () => {
+  if (!st) return;
+  const titel = $('titel').value.trim(), files = [...$('files').files];
+  if (!titel) return say('m2', 'Vul een titel in.', 'bad');
+  if (!files.length) return say('m2', 'Kies minstens één bestand.', 'bad');
+  const bestanden = [];
+  for (const f of files) bestanden.push({ id: rid(), naam: f.name, bytes: new Uint8Array(await f.arrayBuffer()) });
+  st.stukken.push({ id: rid(), titel, bestanden });
+  $('titel').value = ''; $('files').value = '';
+  say('m2', '“' + titel + '” is toegevoegd.', 'ok'); render(); $('out').hidden = true;
+};
+
+async function buildPackage(){
+  const files = [], base = 'koren/' + st.d.id + '/';
+  for (const s of st.stukken) for (const b of s.bestanden) if (b.bytes) files.push({ path: base + b.id + '.nk', bytes: await K.encrypt(st.d.key, b.bytes) });
+  const idx = { v: 1, koor: st.naam, stukken: st.stukken.map(s => ({ id: s.id, titel: s.titel, bestanden: s.bestanden.map(b => ({ id: b.id, naam: b.naam })) })) };
+  files.push({ path: base + 'index.nk', bytes: await K.encrypt(st.d.key, enc.encode(JSON.stringify(idx))) });
+  return files;
+}
+
+$('make').onclick = async () => {
+  if (!st) return;
+  if (!st.stukken.length) return say('m3', 'Voeg eerst minstens één stuk toe.', 'bad');
+  say('m3', 'Bezig met versleutelen…'); $('make').disabled = true;
+  try {
+    pkg = await buildPackage(); window.__pkg = pkg;
+    const n = pkg.length - 1;
+    say('m3', 'Klaar: ' + n + (n === 1 ? ' nieuw bestand' : ' nieuwe bestanden') + ' en de lijst met stukken.', 'ok');
+    $('out').hidden = false;
+    $('dir').hidden = !window.showDirectoryPicker;
+    $('uitleg').textContent = window.showDirectoryPicker
+      ? 'Kies “Zet direct in mijn app-map” en selecteer de map Muziekapp. Je kunt ook de zip downloaden en de map koren in je app-map zetten (kies bij een vraag voor Samenvoegen).'
+      : 'Download de zip, pak hem uit en zet de map koren in je app-map (kies bij een vraag voor Samenvoegen).';
+    const url = location.origin + location.pathname.replace(/beheer\.html$/, '') + '#koor=' + encodeURIComponent(st.code.trim());
+    $('invite').textContent =
+      'Hoi! Hier kun je thuis je stem oefenen voor ' + st.naam + ':\n' + url +
+      '\n\nOpen de link op je iPhone in Safari. Tik daarna op Deel en “Zet op beginscherm”.\nOpen de app, tik op “Stuk oefenen” en vul als dat nodig is deze koorcode in:\n' + st.code.trim() +
+      '\n\nGebruik bij voorkeur oordopjes.';
+  } catch (e) { say('m3', 'Het maken van het pakket is mislukt.', 'bad'); }
+  $('make').disabled = false;
+};
+
+$('dir').onclick = async () => {
+  try {
+    const root = await window.showDirectoryPicker({ mode: 'readwrite' });
+    for (const f of pkg){
+      let dir = root; const parts = f.path.split('/');
+      for (const p of parts.slice(0, -1)) dir = await dir.getDirectoryHandle(p, { create: true });
+      const fh = await dir.getFileHandle(parts[parts.length - 1], { create: true });
+      const w = await fh.createWritable(); await w.write(f.bytes); await w.close();
+    }
+    say('m3', 'Gezet in de map “' + root.name + '”. Je Mac pusht dit vanzelf naar GitHub, of doe zelf git push.', 'ok');
+  } catch (e) { if (e && e.name !== 'AbortError') say('m3', 'Schrijven in de map is niet gelukt. Gebruik de zip.', 'bad'); }
+};
+
+/* zip (zonder compressie) */
+const crcT = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++){ let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+const crc32 = u => { let c = 0xFFFFFFFF; for (let i = 0; i < u.length; i++) c = crcT[(c ^ u[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+function makeZip(files){
+  const parts = [], cen = []; let off = 0;
+  const u16 = n => [n & 255, (n >> 8) & 255], u32 = n => [n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >>> 24) & 255];
+  for (const f of files){
+    const nm = enc.encode(f.path), crc = crc32(f.bytes), sz = f.bytes.length;
+    const lh = new Uint8Array([0x50,0x4b,3,4, 20,0, 0,8, 0,0, 0,0, 0x21,0, ...u32(crc), ...u32(sz), ...u32(sz), ...u16(nm.length), 0,0]);
+    parts.push(lh, nm, f.bytes);
+    cen.push(new Uint8Array([0x50,0x4b,1,2, 20,0, 20,0, 0,8, 0,0, 0,0, 0x21,0, ...u32(crc), ...u32(sz), ...u32(sz), ...u16(nm.length), 0,0, 0,0, 0,0, 0,0, 0,0,0,0, ...u32(off)]), nm);
+    off += lh.length + nm.length + sz;
+  }
+  const cs = cen.reduce((a, b) => a + b.length, 0);
+  const end = new Uint8Array([0x50,0x4b,5,6, 0,0, 0,0, ...u16(files.length), ...u16(files.length), ...u32(cs), ...u32(off), 0,0]);
+  return new Blob([...parts, ...cen, end], { type: 'application/zip' });
+}
+$('zip').onclick = () => {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(makeZip(pkg)); a.download = 'naklank-koor.zip';
+  document.body.append(a); a.click(); a.remove();
+  say('m3', 'Zip gedownload. Pak hem uit en zet de map koren in je app-map.', 'ok');
+};
+$('copy').onclick = async () => {
+  try { await navigator.clipboard.writeText($('invite').textContent); say('m3', 'Bericht gekopieerd.', 'ok'); }
+  catch (e) { const r = document.createRange(); r.selectNodeContents($('invite')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); say('m3', 'Selecteer en kopieer het bericht zelf.', 'bad'); }
+};
+})();
+</script>
+</body>
+</html>

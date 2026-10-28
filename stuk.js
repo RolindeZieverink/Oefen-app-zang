@@ -579,6 +579,10 @@ body.stuk #bar,body.stuk #res,body.stuk #card,body.stuk #meter,body.stuk #chip{d
 #sres[hidden]{display:none}
 #sstatus{margin:8px 0 0;color:var(--mute);font-size:14px}
 #fileLbl{display:block;text-align:center}
+#koorCode{width:100%;padding:14px;border-radius:12px;border:1px solid var(--line);background:#2b2f37;color:var(--ink);font:inherit;font-size:17px}
+.kstuk{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;padding:13px 14px;border-radius:12px;background:#2b2f37}
+.kstuk small{display:block;color:var(--mute);font-size:13px}
+.kstuk b{font-weight:650}
 .stp{display:flex;gap:10px;align-items:center}
 .stp input{width:84px;padding:11px 8px;border-radius:10px;border:1px solid var(--line);background:#2b2f37;color:var(--ink);font:inherit;text-align:center}
 .stp span{color:var(--mute)}
@@ -621,7 +625,19 @@ app.append(sbar);
 const sheet = document.createElement('div'); sheet.className = 'sheet stuk-only'; sheet.id = 'ssetup'; sheet.hidden = true;
 sheet.innerHTML = `<div class="wrap">
 <h1 style="font-size:32px">Stuk oefenen</h1>
-<h2>Bestand</h2>
+<h2>Mijn koor</h2>
+<div id="koorOut">
+  <input id="koorCode" type="text" placeholder="Koorcode" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false">
+  <button class="go sec" id="koorGo" style="margin-top:10px">Open mijn koor</button>
+  <div class="small">De code heb je van je dirigent gekregen.</div>
+</div>
+<div id="koorIn" hidden>
+  <div id="koorNaam" style="font-size:18px;font-weight:650"></div>
+  <div id="koorList" style="display:grid;gap:8px;margin-top:10px"></div>
+  <button class="btn" id="koorUit" style="margin-top:12px;flex:none;padding:10px 14px">Uitloggen</button>
+</div>
+<div id="koorMsg" class="small"></div>
+<h2>Of een eigen bestand</h2>
 <label class="go sec" id="fileLbl" style="margin-top:0">Kies MusicXML of MIDI<input id="fileIn" type="file" multiple style="display:none"></label>
 <label class="go sec" id="fileLbl2" style="margin-top:10px">Voeg nog bestanden toe (bijvoorbeeld een andere stem)<input id="fileAdd" type="file" multiple style="display:none"></label>
 <div class="small">Je kunt één bestand met alle stemmen kiezen, of meerdere bestanden tegelijk, bijvoorbeeld één MIDI per stem. De bestandsnaam wordt dan de naam van de stem.</div>
@@ -656,6 +672,7 @@ function partNames(){
 }
 function fmtLen(){ return piece.measures.length; }
 function renderSetup(){
+  renderKoor();
   $('sstatus').textContent = piece ? piece.title + ' · ' + piece.parts.length + (piece.parts.length === 1 ? ' stem' : ' stemmen') + ' · ' + fmtLen() + ' maten' : 'Nog geen stuk geladen.';
   $('partWrap').hidden = !piece;
   if (piece){
@@ -714,7 +731,7 @@ function mergePieces(list){
   const title = named ? named.piece.title : (pre.replace(/[\s\-_–—:.]+$/, '') || (list[0].stem || 'Stuk'));
   return finishPiece({ title, parts, measures, tempo: tp.piece.tempo.map(t => t.slice()), time: base.time.map(t => t.slice()) });
 }
-async function loadFiles(files, add){
+async function loadFiles(files, add, title){
   if (!files || !files.length) return;
   $('sstatus').textContent = 'Bezig met lezen…';
   try {
@@ -724,6 +741,7 @@ async function loadFiles(files, add){
     const keepPart = add && piece ? partIdx : 0, keepFrom = from, keepTo = to;
     const merged = list.length === 1 ? list[0].piece : mergePieces(list);
     setPiece(merged);
+    if (title){ piece.title = title; renderSetup(); savePiece(); }
     if (add && keepPart < merged.parts.length){ partIdx = keepPart; from = keepFrom; to = keepTo; prepare(); renderSetup(); savePiece(); }
   } catch (err){
     const m = err && err.message;
@@ -735,6 +753,70 @@ async function loadFiles(files, add){
 }
 $('fileIn').onchange = async e => { const f = [...(e.target.files || [])]; await loadFiles(f, false); e.target.value = ''; };
 $('fileAdd').onchange = async e => { const f = [...(e.target.files || [])]; await loadFiles(f, true); e.target.value = ''; };
+/* ---------- koor (versleutelde stukken) ---------- */
+const KK = 'naklank-koor';
+let koor = null;   // { id, key, idx }
+const koorMsg = t => { $('koorMsg').textContent = t || ''; };
+function renderKoor(){
+  $('koorOut').hidden = !!koor; $('koorIn').hidden = !koor;
+  if (!koor) return;
+  $('koorNaam').textContent = koor.idx.koor || 'Mijn koor';
+  const l = $('koorList'); l.innerHTML = '';
+  if (!koor.idx.stukken.length) l.innerHTML = '<div class="small">Er staan nog geen stukken klaar.</div>';
+  koor.idx.stukken.forEach(st => {
+    const b = document.createElement('button'); b.className = 'kstuk'; b.type = 'button';
+    b.innerHTML = '<span><b>' + esc(st.titel) + '</b><small>' + st.bestanden.length + (st.bestanden.length === 1 ? ' bestand' : ' bestanden') + '</small></span><span style="color:var(--orange);font-weight:650">Openen</span>';
+    b.onclick = () => koorLoad(st);
+    l.append(b);
+  });
+}
+async function koorUnlock(code, quiet){
+  const K = window.NKkoor;
+  if (!K || !window.crypto || !crypto.subtle){ koorMsg('Dit toestel kan de koorcode niet gebruiken. Open de app via https.'); return false; }
+  if (!quiet) koorMsg('Bezig met openen…');
+  let d;
+  try { d = await K.derive(code); } catch (e){ koorMsg('Vul een geldige koorcode in.'); return false; }
+  let idx = null;
+  try {
+    const r = await fetch('koren/' + d.id + '/index.nk', { cache: 'no-cache' });
+    if (r.ok){ idx = JSON.parse(new TextDecoder().decode(await K.decrypt(d.key, await r.arrayBuffer()))); try { localStorage.setItem(KK + '-idx', JSON.stringify(idx)); } catch(_){} }
+    else { koorMsg('Deze koorcode is niet bekend. Controleer de code.'); return false; }
+  } catch (e){
+    try { const sv = JSON.parse(localStorage.getItem(KK) || '{}'); if (sv.id === d.id) idx = JSON.parse(localStorage.getItem(KK + '-idx')); } catch(_){}
+    if (!idx){ koorMsg('Geen verbinding. Probeer het opnieuw als je online bent.'); return false; }
+  }
+  koor = { id: d.id, key: d.key, idx };
+  try { localStorage.setItem(KK, JSON.stringify({ code, id: d.id })); } catch(_){}
+  koorMsg(''); renderKoor(); return true;
+}
+async function koorLoad(st){
+  koorMsg('“' + st.titel + '” wordt geladen…');
+  try {
+    const files = [];
+    for (const b of st.bestanden){
+      const r = await fetch('koren/' + koor.id + '/' + b.id + '.nk');
+      if (!r.ok) throw new Error('fetch');
+      files.push(new File([await window.NKkoor.decrypt(koor.key, await r.arrayBuffer())], b.naam));
+    }
+    await loadFiles(files, false, st.titel);
+    koorMsg('');
+  } catch (e){ koorMsg('Dit stuk kon niet geladen worden. Probeer het opnieuw als je online bent.'); }
+}
+$('koorGo').onclick = () => koorUnlock($('koorCode').value, false);
+$('koorCode').onkeydown = e => { if (e.key === 'Enter') koorUnlock($('koorCode').value, false); };
+$('koorUit').onclick = () => { koor = null; try { localStorage.removeItem(KK); localStorage.removeItem(KK + '-idx'); } catch(_){} $('koorCode').value = ''; renderKoor(); };
+// uitnodigingslink: ...#koor=CODE
+(() => {
+  const m = /(?:^|[#&])koor=([^&]+)/.exec(location.hash || '');
+  if (!m) return;
+  try { const code = decodeURIComponent(m[1]); localStorage.setItem(KK, JSON.stringify({ code, id: '' })); } catch(_){}
+  try { history.replaceState(null, '', location.pathname + location.search); } catch(_){}
+})();
+async function koorAuto(){
+  if (koor) return;
+  try { const sv = JSON.parse(localStorage.getItem(KK) || '{}'); if (sv.code) await koorUnlock(sv.code, true); } catch(_){}
+}
+
 function setPiece(p){
   O.volL = {}; O.volS = {};
   piece = p; partIdx = 0; from = p.measures[0].label; to = p.measures[p.measures.length - 1].label;
@@ -882,7 +964,7 @@ cvEl.addEventListener('pointerup', e => {
 
 window.NKstuk = {
   frame,
-  enter(){ medBuf = []; if (!piece && restore()) prepare(); if (!piece) openSetup(); else { prepare(); refresh(); } },
+  enter(){ medBuf = []; if (!piece && restore()) prepare(); koorAuto().then(() => { if (!piece && !sheet.hidden) renderSetup(); }); if (!piece) openSetup(); else { prepare(); refresh(); } },
   leave(){ stopAll(); sheet.hidden = true; },
   _t: { parseXML, parseMidi, parseFile, reduce, evalNote, demoPiece, finishPiece, get state(){ return state; }, get run(){ return run; }, get notes(){ return notes; }, setPiece, get piece(){ return piece; } }
 };
