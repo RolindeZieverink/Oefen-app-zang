@@ -666,8 +666,7 @@ const sbar = document.createElement('div'); sbar.id = 'sbar'; sbar.className = '
 sbar.innerHTML = `
 <div class="col"><button id="sMix" aria-label="Mixer"><svg viewBox="0 0 24 24"><path d="M5 4v16M12 4v16M19 4v16"/><circle cx="5" cy="14" r="2" fill="currentColor"/><circle cx="12" cy="8" r="2" fill="currentColor"/><circle cx="19" cy="15" r="2" fill="currentColor"/></svg></button><span class="lbl">Mixer</span></div>
 <div class="col"><button id="sListen" aria-label="Luister"><svg viewBox="0 0 24 24"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7M18.5 5.5a9 9 0 010 13"/></svg></button><span class="lbl" id="sListenL">Luister</span></div>
-<div class="col"><button id="sSing" class="big" aria-label="Zing mee"><svg viewBox="0 0 24 24" id="sSingI"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg></button><span class="lbl" id="sSingL">Zing mee</span></div>
-<div class="col"><button id="sSet" aria-label="Stuk en opties"><svg viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg></button><span class="lbl">Stuk</span></div>`;
+<div class="col"><button id="sSing" class="big" aria-label="Zing mee"><svg viewBox="0 0 24 24" id="sSingI"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg></button><span class="lbl" id="sSingL">Zing mee</span></div>`;
 app.append(sbar);
 
 const sheet = document.createElement('div'); sheet.className = 'sheet stuk-only'; sheet.id = 'ssetup'; sheet.hidden = true;
@@ -930,7 +929,7 @@ function refresh(){
 }
 $('sListen').onclick = () => { if (state === 'listen') stopAll(); else start('listen'); };
 $('sSing').onclick = () => { if (state === 'sing') stopSing(); else if (state === 'count') stopAll(); else start('sing'); };
-$('sSet').onclick = () => openSetup();
+{ const hd = $('sheadA'); hd.style.pointerEvents = 'auto'; hd.style.cursor = 'pointer'; hd.title = 'Stem, tempo en opties'; hd.addEventListener('click', e => { if (e.target.closest('button')) return; if (piece) openSetup('B'); }); }
 
 const mix = document.createElement('div'); mix.id = 'smix'; mix.className = 'stuk-only'; mix.hidden = true;
 stage.append(mix);

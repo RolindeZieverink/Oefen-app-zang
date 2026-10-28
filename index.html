@@ -643,7 +643,7 @@ window.NKcore = { get ac(){ return ac; }, get analyser(){ return analyser; }, ge
 
 let mode = 'toon';
 function setMode(m){
-  if (mode === m) return;
+  if (mode === m){ if (m === 'stuk' && window.NKstuk) window.NKstuk.enter(); return; }
   mode = m;
   document.body.classList.toggle('stuk', m === 'stuk');
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.m === m));
