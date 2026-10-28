@@ -411,6 +411,7 @@ function stopAll(){
 }
 async function start(kind){
   if (!piece || !notes.length){ openSetup(); return; }
+  if (!buildRunPreview().notes.length){ updateNone(); return; }
   if (!C.ac) return;
   stopAudio(run); sres.hidden = true; pan = 0; sel = null;
   try { await C.ac.resume(); } catch(e){}
@@ -507,7 +508,7 @@ function frame(ctx, W, H, dpr){
       let startK = 0; for (let k = run.frames.length - 1; k >= 0; k--){ if (phX + ((run.frames[k].t - run.t0) - mnow) * pxps < -4){ startK = k; break; } }
       for (let k = startK; k < run.frames.length; k++){
         const f = run.frames[k];
-        if (f.m == null){ pen = false; continue; }
+        if (f.m == null || f.m < lo - 3 || f.m > hi + 3){ pen = false; continue; }
         const x = phX + ((f.t - run.t0) - mnow) * pxps, y = (hi - Math.max(lo - .5, Math.min(hi + .5, f.m)) + .5) * rh;
         if (!pen || f.t - pt > 0.12){ ctx.moveTo(x, y); pen = true; } else ctx.lineTo(x, y);
         pt = f.t;
@@ -602,6 +603,8 @@ body.stuk #bar,body.stuk #res,body.stuk #card,body.stuk #meter,body.stuk #chip{d
 .qb{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
 .qb button{padding:9px 12px;border-radius:10px;background:#363a43;font-size:13px;font-weight:600}
 #nav{display:flex;gap:8px;margin-top:10px}
+#snone{position:absolute;left:calc(var(--kw) + 16px);right:16px;top:30%;padding:16px;border-radius:14px;background:rgba(23,25,28,.95);border:1px solid var(--line);z-index:4;text-align:center;font-size:15px;color:#e6e8f0}
+#snone[hidden]{display:none}
 .prog{margin-top:10px}
 .mstrip{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}
 .mc{min-width:28px;padding:5px 4px;border-radius:7px;font-size:11px;font-weight:650;text-align:center;background:#3a3e48;color:#aab0c0;cursor:pointer;user-select:none}
@@ -621,6 +624,7 @@ const stage = $('stage'), app = $('app');
 const head = document.createElement('div'); head.id = 'shead'; head.className = 'stuk-only';
 head.innerHTML = '<div class="a" id="sheadA"></div><div class="b" id="sheadB"></div>'; stage.append(head);
 
+const sno = document.createElement('div'); sno.id = 'snone'; sno.className = 'stuk-only'; sno.hidden = true; stage.append(sno);
 const sres = document.createElement('div'); sres.id = 'sres'; sres.className = 'stuk-only'; sres.hidden = true;
 sres.innerHTML = '<div class="top"><div class="badge" id="sbadge"></div><div style="min-width:0"><div id="stitle"></div><div id="sdetail"></div></div></div><div id="sissues"></div><div class="btns" id="sbtns"></div>';
 app.insertBefore(sres, $('bar'));
@@ -833,7 +837,24 @@ function setPiece(p){
   prepare(); previewKey = ''; renderSetup(); savePiece();
 }
 
+function updateNone(){
+  const el = $('snone'); if (!el) return;
+  if (!piece || state === 'count' || state === 'sing' || state === 'listen' || state === 'done'){ el.hidden = true; return; }
+  const rn = buildRunPreview();
+  if (rn.notes.length){ el.hidden = true; return; }
+  const last = piece.measures[piece.measures.length - 1].label;
+  let nxt = null; for (const n of notes){ if (n.b >= rn.bE - 1e-6 && (!nxt || n.b < nxt.b)) nxt = n; }
+  if (!nxt) for (const n of notes){ if (!nxt || n.b < nxt.b) nxt = n; }
+  const lab = nxt && piece.measures[nxt.meas] ? piece.measures[nxt.meas].label : null;
+  const nmS = partNames()[partIdx];
+  const key = nmS + '|' + from + '|' + to + '|' + lab; if (el.dataset.k === key && !el.hidden) return; el.dataset.k = key;
+  el.innerHTML = '<div><b>' + esc(nmS) + '</b> zingt niet in maat ' + from + (to !== from ? '–' + to : '') + '.</div>' + (lab != null ? '<button class="btn main" id="snoneGo" style="margin-top:10px">Ga naar maat ' + lab + '</button>' : '');
+  el.hidden = false;
+  const go = $('snoneGo');
+  if (go) go.onclick = () => { const len = Math.max(0, to - from); from = lab; to = Math.min(last, lab + len); prepare(); previewKey = ''; savePiece(); refresh(); };
+}
 function updateHead(){
+  updateNone();
   const a = $('sheadA'), b = $('sheadB');
   if (!piece){ a.textContent = 'Geen stuk geladen'; b.textContent = ''; return; }
   const names = partNames();
