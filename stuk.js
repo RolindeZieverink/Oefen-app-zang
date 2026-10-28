@@ -422,7 +422,7 @@ async function start(kind){
 function finish(){
   if (!run) return;
   if (run.kind === 'sing'){
-    scoreAll(run, true); run.frozen = run.dur + 0.5; state = 'done'; showResult();
+    scoreAll(run, true); run.frozen = run.dur + 0.5; state = 'done'; saveAttempt(run); showResult();
   } else { stopAudio(run); run = null; state = 'idle'; }
   refresh();
 }
@@ -604,6 +604,16 @@ body.stuk #bar,body.stuk #res,body.stuk #card,body.stuk #meter,body.stuk #chip{d
 .qb{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
 .qb button{padding:9px 12px;border-radius:10px;background:#363a43;font-size:13px;font-weight:600}
 #nav{display:flex;gap:8px;margin-top:10px}
+.prog{margin-top:10px}
+.mstrip{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}
+.mc{min-width:28px;padding:5px 4px;border-radius:7px;font-size:11px;font-weight:650;text-align:center;background:#3a3e48;color:#aab0c0;cursor:pointer;user-select:none}
+.mc.goed{background:#3ccf7a;color:#0d1a11}.mc.wankel{background:#e8890c;color:#221300}.mc.opnieuw{background:#ff6b5e;color:#2b0a06}
+.pl{font-size:13px;color:#d7dae5;margin-top:3px;line-height:1.35}
+.pl i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px;background:#3a3e48}
+.pl.goed i{background:#3ccf7a}.pl.wankel i{background:#e8890c}.pl.opnieuw i{background:#ff6b5e}
+.hrow{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:12px;background:#2b2f37;margin-top:8px}
+.hrow .t{flex:1;min-width:0;font-size:14px}.hrow .t small{display:block;color:var(--mute);font-size:12px;margin-top:2px}
+.hrow button{flex:none;padding:8px 12px;border-radius:10px;background:#3a3e48;font-weight:600;font-size:13px;color:#fff}
 #nav button{flex:1;padding:9px 8px;border-radius:10px;background:#2f333b;font-size:13px;font-weight:600;color:#d7dae5}
 #sbar .col{width:64px}
 `;
@@ -646,7 +656,7 @@ sheet.innerHTML = `<div class="wrap">
 <div class="small">Je kunt één bestand met alle stemmen kiezen, of meerdere bestanden tegelijk, bijvoorbeeld één MIDI per stem. De bestandsnaam wordt dan de naam van de stem.</div>
 <button class="go sec" id="demoBtn" style="margin-top:10px">Voorbeeldmelodie laden</button>
 <div id="sstatus"></div>
-<div id="partWrap"><h2>Stem</h2><div class="seg" id="partSeg"></div></div>
+<div id="partWrap"><h2>Stem</h2><div class="seg" id="partSeg"></div><button class="go sec" id="histBtn" style="margin-top:12px">Mijn resultaten bij deze stem</button></div>
 <h2>Maten</h2>
 <div class="stp"><input id="mFrom" type="number" inputmode="numeric" min="1"><span>tot en met</span><input id="mTo" type="number" inputmode="numeric" min="1"><button class="btn" id="mAll" style="flex:none;padding:11px 14px">Alles</button></div>
 <div class="small" id="mHint"></div>
@@ -919,6 +929,8 @@ function showResult(){
     iss.append(el);
   });
   if (bad.length > 2){ const el = document.createElement('div'); el.className = 'issue'; el.style.color = 'var(--mute)'; el.textContent = '… en ' + (bad.length - 2) + ' meer, gebruik de knoppen hieronder'; iss.append(el); }
+  const i0p = labelToIdx(from), i1p = Math.max(i0p, labelToIdx(to));
+  renderProgress(iss, measProgress(), i0p, i1p, 24, i => { pan = run.sec(piece.measures[i].b) - 0.4 - run.frozen; sel = null; });
   const nav = document.createElement('div'); nav.id = 'nav';
   nav.innerHTML = '<button id="navP">← Vorige fout</button><button id="navN">Volgende fout →</button>';
   iss.append(nav);
@@ -927,6 +939,7 @@ function showResult(){
   bt.innerHTML = '';
   const b1 = document.createElement('button'); b1.className = 'btn'; b1.textContent = 'Nog eens'; b1.onclick = () => start('sing');
   bt.append(b1);
+  const bh = document.createElement('button'); bh.className = 'btn'; bh.textContent = 'Resultaten'; bh.onclick = openHist; bt.append(bh);
   if (worst != null && (to > from)){
     const lab = piece.measures[worst].label;
     const b2 = document.createElement('button'); b2.className = 'btn main'; b2.textContent = 'Oefen maat ' + lab;
@@ -965,10 +978,117 @@ cvEl.addEventListener('pointerup', e => {
   sel = run.notes.find(n => n.m === m && t >= n.s - 0.05 && t <= n.e + 0.05) || null;
 });
 
+/* =========================================================
+   Opslaan en voortgang per stem
+   ========================================================= */
+const HK = 'naklank-hist', KC = { ok: 'o', high: 'h', low: 'l', none: 'n' }, CK = { o: 'ok', h: 'high', l: 'low', n: 'none' };
+const histAll = () => { try { return JSON.parse(localStorage.getItem(HK)) || {}; } catch(e){ return {}; } };
+function histPut(h){
+  for (let tries = 0; tries < 10; tries++){
+    try { localStorage.setItem(HK, JSON.stringify(h)); return true; } catch(e){}
+    let done = false;   // vol: eerst oude opnames (lijn) weghalen, dan de oudste pogingen
+    for (const k in h){ const arr = h[k]; for (let i = arr.length - 1; i >= 3; i--) if (arr[i].fr){ delete arr[i].fr; done = true; } }
+    if (!done) for (const k in h){ if (h[k].length > 1){ h[k].pop(); done = true; break; } }
+    if (!done) break;
+  }
+  return false;
+}
+const histKey = () => piece.title + ' | ' + partNames()[partIdx];
+function saveAttempt(rn){
+  if (!piece || !rn.notes.length || rn.notes.every(n => n.status.k === 'none')) return;
+  const meas = {}; let ok = 0;
+  rn.notes.forEach(n => {
+    const l = piece.measures[n.meas] ? piece.measures[n.meas].label : n.meas;
+    const m = meas[l] || (meas[l] = [0, 0]); m[1]++; if (n.status.k === 'ok'){ m[0]++; ok++; }
+  });
+  const fr = []; let lt = -9;
+  for (const f of rn.frames){ const t = f.t - rn.t0; if (t - lt < 0.05) continue; lt = t; fr.push(Math.round(t * 100) / 100, f.m == null ? -1 : Math.round(f.m * 10) / 10); }
+  const a = { ts: Date.now(), from, to, speed: O.speed, chord: O.chord, ok, tot: rn.notes.length, meas, st: rn.notes.map(n => [KC[n.status.k], n.status.cents != null ? Math.round(n.status.cents) : 0]), fr };
+  const h = histAll(), k = histKey(); (h[k] = h[k] || []).unshift(a); h[k].length = Math.min(h[k].length, 10); histPut(h);
+}
+// goed / wankel / opnieuw per maat, op basis van de laatste drie keer dat de maat gezongen is
+function measProgress(){
+  const list = histAll()[histKey()] || [], out = {};
+  piece.measures.forEach(ms => {
+    const rs = [];
+    for (const a of list){ const m = a.meas[ms.label]; if (m && m[1]) rs.push(m[0] / m[1]); if (rs.length >= 3) break; }
+    if (!rs.length) return;
+    out[ms.label] = rs[0] < 0.5 ? 'opnieuw' : (rs.every(r => r >= 0.85) ? 'goed' : 'wankel');
+  });
+  return out;
+}
+function rangeTxt(arr){
+  const a = arr.map(Number).sort((x, y) => x - y), parts = [];
+  for (let i = 0; i < a.length;){ let j = i; while (j + 1 < a.length && a[j + 1] === a[j] + 1) j++; parts.push(j > i ? a[i] + '–' + a[j] : String(a[i])); i = j + 1; }
+  return (a.length > 1 ? 'maten ' : 'maat ') + parts.join(', ');
+}
+function renderProgress(parent, pg, i0, i1, maxChips, tap){
+  const by = { opnieuw: [], wankel: [], goed: [] }, idx = [];
+  for (let i = i0; i <= i1; i++){ idx.push(i); const l = piece.measures[i].label, st = pg[l]; if (st) by[st].push(l); }
+  if (!by.opnieuw.length && !by.wankel.length && !by.goed.length) return;
+  const box = document.createElement('div'); box.className = 'prog';
+  if (idx.length <= maxChips){
+    const strip = document.createElement('div'); strip.className = 'mstrip';
+    idx.forEach(i => { const c = document.createElement('div'); c.className = 'mc ' + (pg[piece.measures[i].label] || ''); c.textContent = piece.measures[i].label; c.onclick = () => tap(i); strip.append(c); });
+    box.append(strip);
+  }
+  [['opnieuw', 'Opnieuw bekijken'], ['wankel', 'Wankel'], ['goed', 'Goed']].forEach(([k, lab]) => {
+    if (!by[k].length) return;
+    const l = document.createElement('div'); l.className = 'pl ' + k; l.innerHTML = '<i></i><b>' + lab + ':</b> ' + rangeTxt(by[k]); box.append(l);
+  });
+  parent.append(box);
+}
+
+const hist = document.createElement('div'); hist.className = 'sheet stuk-only'; hist.id = 'shist'; hist.hidden = true; document.body.append(hist);
+let wisArm = false;
+function openHist(){
+  if (!piece) return;
+  wisArm = false; renderHist(); hist.hidden = false; hist.scrollTop = 0;
+}
+function renderHist(){
+  const list = histAll()[histKey()] || [], pg = measProgress(), n = piece.measures.length;
+  hist.innerHTML = '<div class="wrap"><h1 style="font-size:30px">Mijn resultaten</h1><div class="small" id="hSub"></div><div id="hProg"></div><h2>Eerdere keren</h2><div id="hList"></div><button class="go sec" id="hWis" style="margin-top:16px"></button><button class="go" id="hTerug">Terug</button></div>';
+  $('hSub').textContent = piece.title + ' · ' + partNames()[partIdx];
+  const hp = $('hProg');
+  if (!list.length) hp.innerHTML = '<div class="small" style="margin-top:12px">Je hebt bij deze stem nog niets opgeslagen. Zing een stuk mee en het resultaat wordt hier automatisch bewaard.</div>';
+  else {
+    renderProgress(hp, pg, 0, n - 1, 400, i => { const l = piece.measures[i].label; from = to = l; prepare(); previewKey = ''; savePiece(); hist.hidden = true; sheet.hidden = true; refresh(); });
+    const lg = document.createElement('div'); lg.className = 'small'; lg.textContent = 'Grijs = nog niet geoefend. Tik op een maat om alleen die maat te oefenen. Wankel = nog niet steeds goed in de laatste drie keer.'; hp.append(lg);
+  }
+  const hl = $('hList');
+  list.forEach((a, i) => {
+    const d = new Date(a.ts), pct = a.tot ? Math.round(100 * a.ok / a.tot) : 0;
+    const r = document.createElement('div'); r.className = 'hrow';
+    const rg = a.from === a.to ? 'maat ' + a.from : 'maat ' + a.from + '–' + a.to;
+    r.innerHTML = '<div class="t"><b>' + pct + '%</b> goed · ' + a.ok + ' van ' + a.tot + ' noten<small>' + d.toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + ' · ' + rg + ' · tempo ' + Math.round(a.speed * 100) + '%</small></div>';
+    if (a.fr){ const b = document.createElement('button'); b.textContent = 'Bekijk'; b.onclick = () => reviewAttempt(a); r.append(b); }
+    hl.append(r);
+  });
+  $('hWis').textContent = wisArm ? 'Zeker weten? Tik nog eens om te wissen' : 'Wis mijn resultaten bij deze stem';
+  $('hWis').hidden = !list.length;
+  $('hWis').onclick = () => {
+    if (!wisArm){ wisArm = true; renderHist(); return; }
+    const h = histAll(); delete h[histKey()]; histPut(h); wisArm = false; renderHist();
+  };
+  $('hTerug').onclick = () => { hist.hidden = true; if (run && state === 'done') showResult(); };
+}
+function reviewAttempt(a){
+  stopAll(); from = a.from; to = a.to; O.speed = a.speed; if (a.chord) O.chord = a.chord; prepare(); previewKey = '';
+  const rn = buildRun('sing');
+  if (rn.notes.length !== a.st.length){ hist.querySelector('#hSub').textContent = 'Deze opname past niet meer bij het stuk (het stuk is veranderd).'; return; }
+  rn.t0 = 0;
+  rn.notes.forEach((n, i) => { const k = CK[a.st[i][0]] || 'none', c = a.st[i][1]; n.status = { k, cents: c, sung: n.m + c / 100 }; });
+  for (let i = 0; i + 1 < a.fr.length; i += 2) rn.frames.push({ t: a.fr[i], m: a.fr[i + 1] < 0 ? null : a.fr[i + 1] });
+  run = rn; state = 'done'; run.frozen = run.dur + 0.5; pan = 0; sel = null;
+  savePiece(); hist.hidden = true; sheet.hidden = true; mix.hidden = true;
+  showResult(); refresh();
+}
+$('histBtn').onclick = openHist;
+
 window.NKstuk = {
   frame,
   enter(){ medBuf = []; if (!piece && restore()) prepare(); koorAuto().then(() => { if (!piece && !sheet.hidden) renderSetup(); }); if (!piece) openSetup(); else { prepare(); refresh(); } },
-  leave(){ stopAll(); sheet.hidden = true; },
+  leave(){ stopAll(); sheet.hidden = true; hist.hidden = true; },
   _t: { parseXML, parseMidi, parseFile, reduce, evalNote, demoPiece, finishPiece, get state(){ return state; }, get run(){ return run; }, get notes(){ return notes; }, setPiece, get piece(){ return piece; } }
 };
 })();
