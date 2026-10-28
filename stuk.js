@@ -145,7 +145,7 @@ function parseMidi(ab){
   const endB = Math.max(...parts.map(p => Math.max(...p.notes.map(n => n.b + n.d))));
   const measures = []; let b = 0, ts = timeEv.length ? timeEv[0] : [0, 4, 4], ti = 0, i = 0;
   const time = [];
-  while (b < endB + 1e-6 && i < 2000){
+  while (b < endB - 1e-6 && i < 2000){
     while (ti < timeEv.length && timeEv[ti][0] <= b + 1e-6){ ts = timeEv[ti]; time.push([i, ts[1], ts[2]]); ti++; }
     const len = ts[1] * 4 / ts[2];
     measures.push({ i, label: String(i + 1), b, len }); b += len; i++;
@@ -157,6 +157,7 @@ function parseMidi(ab){
 
 function finishPiece(pc){
   if (!pc.parts.length) throw new Error('empty');
+  pc.hadTempo = pc.hadTempo || pc.tempo.length > 0;
   if (!pc.tempo.length) pc.tempo = [[0, 100]];
   pc.tempo.sort((a, b) => a[0] - b[0]);
   pc.tempo = pc.tempo.filter((t, i, arr) => i === arr.length - 1 || Math.abs(arr[i+1][0] - t[0]) > 1e-6);
@@ -230,11 +231,12 @@ async function parseFile(file){
 /* =========================================================
    Stuk, stem, tijdlijn
    ========================================================= */
-const DEF = { chord:'top', speed:1, guide:'uit', others:false, hide:false, click:false };
+const DEF = { chord:'top', speed:1, hide:false, click:false, volL:{}, volS:{}, mixMode:'L' };
 let O = loadO();
 let piece = null, partIdx = 0, from = 1, to = 1, notes = [];
 let state = 'idle';     // idle | count | listen | sing | done
 let run = null;
+let pan = 0, sel = null, geom = null;   // terugkijken na afloop
 
 function loadO(){ try { return Object.assign({}, DEF, (JSON.parse(localStorage.getItem(LS) || '{}').o) || {}); } catch(e){ return Object.assign({}, DEF); } }
 function savePiece(){
@@ -330,30 +332,35 @@ function click(bus, t, accent){
   o.frequency.value = accent ? 1500 : 1000; g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.35, t + .004); g.gain.exponentialRampToValueAtTime(.001, t + .07);
   o.connect(g); g.connect(bus); o.start(t); o.stop(t + .09);
 }
+const redCache = new WeakMap();
+const reducedOf = p => { let r = redCache.get(p); if (!r || r.chord !== O.chord){ r = { chord: O.chord, notes: reduce(p.notes) }; redCache.set(p, r); } return r.notes; };
+// volume per stem: eigen stem apart ('own'), andere stemmen op volgnummer
+function volOf(kind, pi){
+  const m = kind === 'sing' ? O.volS : O.volL;
+  if (pi === partIdx){ const v = m.own; return v != null ? v : (kind === 'sing' ? 0 : 1); }
+  const v = m[pi]; return v != null ? v : 0.4;
+}
+function applyMix(){
+  if (!run || !run.partBus) return;
+  run.partBus.forEach((g, pi) => { try { g.gain.setTargetAtTime(volOf(run.kind, pi), C.ac.currentTime, 0.02); } catch(e){} });
+}
 function startAudio(rn){
   const ac = C.ac, bus = ac.createGain(); bus.connect(ac.destination); rn.bus = bus;
+  rn.partBus = piece.parts.map((p, pi) => { const g = ac.createGain(); g.gain.value = volOf(rn.kind, pi); g.connect(bus); return g; });
   const ev = [];
   if (rn.kind === 'sing'){
     for (let k = 0; k < rn.nPulse; k++) ev.push({ t: rn.cs + k * rn.pulse, click: true, accent: k === 0 });
-    if (O.click) for (let t = 0, k = 0; ; k++){
+    if (O.click) for (let k = 0; ; k++){
       const tt = rn.t0 + k * rn.pulse; if (tt - rn.t0 > rn.dur) break; ev.push({ t: tt, click: true, accent: false });
     }
-    if (O.guide !== 'uit'){
-      const vol = O.guide === 'luid' ? 0.3 : 0.12;
-      for (const n of rn.notes) ev.push({ t: rn.t0 + n.s, d: n.e - n.s, m: n.m, vol });
-    }
-  } else {
-    for (const n of rn.notes) ev.push({ t: rn.t0 + n.s, d: n.e - n.s, m: n.m, vol: 0.34 });
-    if (O.others){
-      piece.parts.forEach((p, pi) => {
-        if (pi === partIdx) return;
-        for (const n of reduce(p.notes)){
-          if (n.b < rn.bS - 1e-6 || n.b >= rn.bE - 1e-6) continue;
-          ev.push({ t: rn.t0 + rn.sec(n.b), d: rn.sec(Math.min(n.b + n.d, rn.bE)) - rn.sec(n.b), m: n.m, vol: 0.09 });
-        }
-      });
-    }
   }
+  piece.parts.forEach((p, pi) => {
+    for (const n of reducedOf(p)){
+      if (n.b < rn.bS - 1e-6 || n.b >= rn.bE - 1e-6) continue;
+      const s0 = rn.sec(n.b);
+      ev.push({ t: rn.t0 + s0, d: rn.sec(Math.min(n.b + n.d, rn.bE)) - s0, m: n.m, vol: 0.32, pi });
+    }
+  });
   ev.sort((a, b) => a.t - b.t);
   let i = 0;
   const tick = () => {
@@ -361,7 +368,7 @@ function startAudio(rn){
     while (i < ev.length && ev[i].t < lim){
       const e = ev[i++];
       if (e.t < ac.currentTime - 0.05) continue;
-      if (e.click) click(bus, e.t, e.accent); else playNote(bus, e.t, e.d, e.m, e.vol);
+      if (e.click) click(bus, e.t, e.accent); else playNote(rn.partBus[e.pi], e.t, e.d, e.m, e.vol);
     }
     if (i >= ev.length) { clearInterval(rn.timer); rn.timer = null; }
   };
@@ -405,7 +412,7 @@ function stopAll(){
 async function start(kind){
   if (!piece || !notes.length){ openSetup(); return; }
   if (!C.ac) return;
-  stopAudio(run); sres.hidden = true;
+  stopAudio(run); sres.hidden = true; pan = 0; sel = null;
   try { await C.ac.resume(); } catch(e){}
   const rn = buildRun(kind), now = C.ac.currentTime;
   if (kind === 'sing'){ rn.cs = now + 0.25; rn.t0 = rn.cs + rn.nPulse * rn.pulse; state = 'count'; }
@@ -434,7 +441,8 @@ function frame(ctx, W, H, dpr){
     if (state === 'sing' && C.analyser){ C.analyser.getFloatTimeDomainData(C.buf); sample(now); scoreAll(run, false); }
     if ((state === 'sing' || state === 'listen') && now - run.t0 > run.dur + (run.kind === 'sing' ? 0.9 : 0.4)) finish();
   }
-  const mnow = !run ? -0.6 : (state === 'done' ? run.frozen : now - run.t0);
+  if (run && state === 'done') pan = Math.max(-1 - run.frozen, Math.min(0.4, pan));
+  const mnow = !run ? -0.6 : (state === 'done' ? run.frozen + pan : now - run.t0);
 
   // toonbereik van deze stem
   let lo = 55, hi = 76;
@@ -442,6 +450,7 @@ function frame(ctx, W, H, dpr){
   while (hi - lo < 13){ hi++; if (hi - lo < 13) lo--; }
   const n_ = hi - lo + 1, KW = Math.max(64, Math.min(84, W * 0.2)), gw = W - KW, rh = H / n_;
   const pxps = gw / WINDOW, phX = gw * PLAYHEAD;
+  geom = { KW, gw, rh, lo, hi, phX, pxps, mnow };
   const rowY = m => (hi - m) * rh;
 
   ctx.save(); ctx.translate(KW, 0);
@@ -476,6 +485,11 @@ function frame(ctx, W, H, dpr){
       const y = rowY(n.m) + (rh - bh) / 2, w = Math.max(3, x1 - x0 - 1.5);
       ctx.fillStyle = fill;
       ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x0, y, w, bh, 3); else ctx.rect(x0, y, w, bh); ctx.fill();
+      if (state === 'done' && st && (st.k === 'high' || st.k === 'low')){
+        const sy = (hi - (n.m + st.cents / 100) + .5) * rh;
+        if (sy > 0 && sy < H){ ctx.fillStyle = '#fff'; ctx.fillRect(x0, sy - 1, Math.max(3, x1 - x0 - 1.5), 2); }
+      }
+      if (n === sel){ ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x0 - 1, y - 1, w + 2, bh + 2, 4); else ctx.rect(x0 - 1, y - 1, w + 2, bh + 2); ctx.stroke(); }
       if (st && (st.k === 'high' || st.k === 'low') && w > 14){
         ctx.fillStyle = '#2b0a06'; ctx.font = '700 ' + Math.min(14, bh) + 'px -apple-system,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(st.k === 'high' ? '↓' : '↑', x0 + w / 2, y + bh / 2 + .5);
@@ -570,6 +584,21 @@ body.stuk #bar,body.stuk #res,body.stuk #card,body.stuk #meter,body.stuk #chip{d
 .stp span{color:var(--mute)}
 .small{font-size:13px;color:var(--mute);margin-top:6px}
 .issue{font-size:13px;color:#d7dae5;margin-top:4px}
+#smix{position:absolute;left:8px;right:8px;bottom:8px;max-height:64%;overflow:auto;-webkit-overflow-scrolling:touch;padding:14px;border-radius:16px;background:rgba(30,33,38,.98);border:1px solid var(--line);box-shadow:0 10px 34px rgba(0,0,0,.55);z-index:5}
+#smix[hidden]{display:none}
+#smix .hd{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
+#smix .hd b{font-size:17px}
+#smix .x{padding:8px 14px;border-radius:10px;background:#363a43;font-weight:650}
+.mix{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr) 42px;gap:10px;align-items:center;margin-top:12px;font-size:14px}
+.mix input[type=range]{width:100%;accent-color:var(--orange);margin:0}
+.mix .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mix .nm b{color:var(--orange);font-weight:650}
+.mix .pc{text-align:right;color:var(--mute);font-variant-numeric:tabular-nums}
+.qb{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.qb button{padding:9px 12px;border-radius:10px;background:#363a43;font-size:13px;font-weight:600}
+#nav{display:flex;gap:8px;margin-top:10px}
+#nav button{flex:1;padding:9px 8px;border-radius:10px;background:#2f333b;font-size:13px;font-weight:600;color:#d7dae5}
+#sbar .col{width:64px}
 `;
 document.head.append(css);
 
@@ -583,6 +612,7 @@ app.insertBefore(sres, $('bar'));
 
 const sbar = document.createElement('div'); sbar.id = 'sbar'; sbar.className = 'stuk-only';
 sbar.innerHTML = `
+<div class="col"><button id="sMix" aria-label="Mixer"><svg viewBox="0 0 24 24"><path d="M5 4v16M12 4v16M19 4v16"/><circle cx="5" cy="14" r="2" fill="currentColor"/><circle cx="12" cy="8" r="2" fill="currentColor"/><circle cx="19" cy="15" r="2" fill="currentColor"/></svg></button><span class="lbl">Mixer</span></div>
 <div class="col"><button id="sListen" aria-label="Luister"><svg viewBox="0 0 24 24"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7M18.5 5.5a9 9 0 010 13"/></svg></button><span class="lbl" id="sListenL">Luister</span></div>
 <div class="col"><button id="sSing" class="big" aria-label="Zing mee"><svg viewBox="0 0 24 24" id="sSingI"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg></button><span class="lbl" id="sSingL">Zing mee</span></div>
 <div class="col"><button id="sSet" aria-label="Stuk en opties"><svg viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg></button><span class="lbl">Stuk</span></div>`;
@@ -592,7 +622,9 @@ const sheet = document.createElement('div'); sheet.className = 'sheet stuk-only'
 sheet.innerHTML = `<div class="wrap">
 <h1 style="font-size:32px">Stuk oefenen</h1>
 <h2>Bestand</h2>
-<label class="go sec" id="fileLbl" style="margin-top:0">Kies MusicXML of MIDI<input id="fileIn" type="file" style="display:none"></label>
+<label class="go sec" id="fileLbl" style="margin-top:0">Kies MusicXML of MIDI<input id="fileIn" type="file" multiple style="display:none"></label>
+<label class="go sec" id="fileLbl2" style="margin-top:10px">Voeg nog bestanden toe (bijvoorbeeld een andere stem)<input id="fileAdd" type="file" multiple style="display:none"></label>
+<div class="small">Je kunt één bestand met alle stemmen kiezen, of meerdere bestanden tegelijk, bijvoorbeeld één MIDI per stem. De bestandsnaam wordt dan de naam van de stem.</div>
 <button class="go sec" id="demoBtn" style="margin-top:10px">Voorbeeldmelodie laden</button>
 <div id="sstatus"></div>
 <div id="partWrap"><h2>Stem</h2><div class="seg" id="partSeg"></div></div>
@@ -602,10 +634,8 @@ sheet.innerHTML = `<div class="wrap">
 <h2>Tempo</h2><div class="seg" id="spdSeg"></div>
 <h2>Bij gedeelde stemmen</h2><div class="seg" id="chordSeg"></div>
 <div class="small">Heeft een stem op één moment twee noten, dan oefen je de bovenste of onderste.</div>
-<h2>Voorbeeld horen tijdens het zingen</h2><div class="seg" id="guideSeg"></div>
-<div class="small">Gebruik hiervoor oordopjes. Anders hoort de microfoon het voorbeeld mee.</div>
+<div class="small" style="margin-top:14px">Het volume van elke stem stel je in met de knop “Mixer” onderin het scherm. Gebruik oordopjes als er stemmen meespelen tijdens het zingen.</div>
 <h2>Opties</h2>
-<div class="row"><div>Bij “Luister” ook de andere stemmen<small>Zacht, zodat je de harmonie hoort.</small></div><button class="sw" id="swOthers" aria-label="Andere stemmen"></button></div>
 <div class="row"><div>Noten verbergen tijdens het zingen<small>Je ziet de noten pas nadat je ze gezongen hebt.</small></div><button class="sw" id="swHide" aria-label="Noten verbergen"></button></div>
 <div class="row"><div>Klik tijdens het zingen</div><button class="sw" id="swClick" aria-label="Klik"></button></div>
 <button class="go" id="sDone">Klaar</button>
@@ -637,10 +667,9 @@ function renderSetup(){
   }
   seg($('spdSeg'), [[.5, '50%'], [.7, '70%'], [.85, '85%'], [1, '100%']], O.speed, v => { O.speed = v; });
   seg($('chordSeg'), [['top', 'Bovenste noot'], ['bottom', 'Onderste noot']], O.chord, v => { O.chord = v; prepare(); });
-  seg($('guideSeg'), [['uit', 'Uit'], ['zacht', 'Zacht'], ['luid', 'Luid']], O.guide, v => { O.guide = v; });
-  $('swOthers').classList.toggle('on', O.others); $('swHide').classList.toggle('on', O.hide); $('swClick').classList.toggle('on', O.click);
+  $('swHide').classList.toggle('on', O.hide); $('swClick').classList.toggle('on', O.click);
 }
-[['swOthers', 'others'], ['swHide', 'hide'], ['swClick', 'click']].forEach(([id, k]) => { $(id).onclick = () => { O[k] = !O[k]; renderSetup(); }; });
+[['swHide', 'hide'], ['swClick', 'click']].forEach(([id, k]) => { $(id).onclick = () => { O[k] = !O[k]; renderSetup(); }; });
 
 function openSetup(){ stopAll(); renderSetup(); sheet.hidden = false; }
 function closeSetup(){
@@ -656,20 +685,58 @@ function closeSetup(){
 $('sDone').onclick = closeSetup;
 $('mAll').onclick = () => { if (!piece) return; $('mFrom').value = piece.measures[0].label; $('mTo').value = piece.measures[piece.measures.length - 1].label; };
 $('demoBtn').onclick = () => { setPiece(demoPiece()); };
-$('fileIn').onchange = async e => {
-  const f = e.target.files && e.target.files[0]; if (!f) return;
+const stemOf = n => n.replace(/\.[^.]+$/, '');
+function commonPrefix(names){
+  if (names.length < 2) return '';
+  let p = names[0]; for (const n of names) while (!n.startsWith(p)) p = p.slice(0, -1);
+  const m = p.match(/^(.*[\s\-_–—:.])/); const pre = m ? m[1] : '';
+  const ok = names.every(n => /[A-Za-zÀ-ÿ]{3,}/.test(n.slice(pre.length)));
+  return ok ? pre : '';
+}
+function mergePieces(list){
+  const base = list.reduce((a, b) => b.piece.measures.length > a.piece.measures.length ? b : a).piece;
+  const stems = list.filter(x => x.stem).map(x => x.stem);
+  const pre = commonPrefix(stems);
+  const parts = [];
+  list.forEach(x => x.piece.parts.forEach(pt => {
+    let name = pt.name;
+    if (x.stem && x.piece.parts.length === 1 && list.length > 1){
+      const st = x.stem.slice(pre.length).replace(/^[\s\-_–—:.]+|[\s\-_–—:.]+$/g, '');
+      name = st || x.stem;
+    }
+    parts.push({ name, notes: pt.notes.map(n => Object.assign({}, n)) });
+  }));
+  const measures = base.measures.map(m => ({ i: m.i, label: m.label, b: m.b, len: m.len }));
+  const tp = list.find(x => x.piece.hadTempo) || list[0];
+  parts.forEach(p => p.notes.forEach(n => { let k = measures.length - 1; while (k > 0 && measures[k].b > n.b + 1e-6) k--; n.meas = k; }));
+  const generic = t => !t || /^MIDI-bestand$|^Stuk$|^Spoor/i.test(t);
+  const named = list.find(x => !generic(x.piece.title));
+  const title = named ? named.piece.title : (pre.replace(/[\s\-_–—:.]+$/, '') || (list[0].stem || 'Stuk'));
+  return finishPiece({ title, parts, measures, tempo: tp.piece.tempo.map(t => t.slice()), time: base.time.map(t => t.slice()) });
+}
+async function loadFiles(files, add){
+  if (!files || !files.length) return;
   $('sstatus').textContent = 'Bezig met lezen…';
-  try { setPiece(await parseFile(f)); }
-  catch (err){
+  try {
+    const list = [];
+    if (add && piece) list.push({ piece, stem: null });
+    for (const f of files) list.push({ piece: await parseFile(f), stem: stemOf(f.name) });
+    const keepPart = add && piece ? partIdx : 0, keepFrom = from, keepTo = to;
+    const merged = list.length === 1 ? list[0].piece : mergePieces(list);
+    setPiece(merged);
+    if (add && keepPart < merged.parts.length){ partIdx = keepPart; from = keepFrom; to = keepTo; prepare(); renderSetup(); savePiece(); }
+  } catch (err){
     const m = err && err.message;
     $('sstatus').textContent = m === 'timewise' ? 'Dit MusicXML-formaat (timewise) wordt niet ondersteund. Exporteer als gewone MusicXML of MIDI.'
       : m === 'nodecomp' ? 'Dit gecomprimeerde bestand kan op dit toestel niet geopend worden. Exporteer als .musicxml (niet gecomprimeerd) of .mid.'
       : m === 'smpte' ? 'Dit MIDI-bestand gebruikt een tijdformaat dat niet ondersteund wordt.'
-      : 'Dit bestand kon niet gelezen worden. Gebruik MusicXML (.musicxml, .xml, .mxl) of MIDI (.mid).';
+      : 'Een van de bestanden kon niet gelezen worden. Gebruik MusicXML (.musicxml, .xml, .mxl) of MIDI (.mid).';
   }
-  e.target.value = '';
-};
+}
+$('fileIn').onchange = async e => { const f = [...(e.target.files || [])]; await loadFiles(f, false); e.target.value = ''; };
+$('fileAdd').onchange = async e => { const f = [...(e.target.files || [])]; await loadFiles(f, true); e.target.value = ''; };
 function setPiece(p){
+  O.volL = {}; O.volS = {};
   piece = p; partIdx = 0; from = p.measures[0].label; to = p.measures[p.measures.length - 1].label;
   prepare(); previewKey = ''; renderSetup(); savePiece();
 }
@@ -679,6 +746,11 @@ function updateHead(){
   if (!piece){ a.textContent = 'Geen stuk geladen'; b.textContent = ''; return; }
   const names = partNames();
   a.innerHTML = '<b>' + esc(names[partIdx]) + '</b> · maat ' + from + (to !== from ? '–' + to : '') + ' · ' + Math.round(O.speed * 100) + '%';
+  if (state === 'done' && sel && sel.status){
+    const st = sel.status, lab = piece.measures[sel.meas] ? piece.measures[sel.meas].label : '?';
+    const what = st.k === 'ok' ? 'goed' : st.k === 'none' ? 'niet gehoord' : (st.k === 'high' ? 'te hoog' : 'te laag') + ' (' + (st.cents > 0 ? '+' : '−') + Math.round(Math.abs(st.cents)) + ' cent)';
+    a.innerHTML = 'Maat ' + lab + ' · <b>' + nm(sel.m) + '</b>' + (sel.lyr ? ' “' + esc(sel.lyr.replace(/-$/, '')) + '”' : '') + ': ' + what;
+  }
   if (run && run.kind === 'sing'){
     const done = run.notes.filter(n => n.status), ok = done.filter(n => n.status.k === 'ok').length;
     b.textContent = '✓ ' + ok + '/' + run.notes.length;
@@ -698,6 +770,48 @@ $('sListen').onclick = () => { if (state === 'listen') stopAll(); else start('li
 $('sSing').onclick = () => { if (state === 'count' || state === 'sing') stopAll(); else start('sing'); };
 $('sSet').onclick = openSetup;
 
+const mix = document.createElement('div'); mix.id = 'smix'; mix.className = 'stuk-only'; mix.hidden = true;
+stage.append(mix);
+function renderMix(){
+  if (!piece){ mix.innerHTML = '<div class="hd"><b>Mixer</b><button class="x" id="mixX">Klaar</button></div><div class="small">Laad eerst een stuk.</div>'; $('mixX').onclick = () => { mix.hidden = true; }; return; }
+  const kind = O.mixMode === 'S' ? 'sing' : 'listen', map = kind === 'sing' ? O.volS : O.volL, names = partNames();
+  const order = [partIdx].concat(names.map((_, i) => i).filter(i => i !== partIdx));
+  mix.innerHTML = '<div class="hd"><b>Mixer</b><button class="x" id="mixX">Klaar</button></div><div class="seg" id="mixSeg"></div>';
+  const rows = document.createElement('div');
+  order.forEach(pi => {
+    const key = pi === partIdx ? 'own' : pi, v = Math.round(volOf(kind, pi) * 100);
+    const r = document.createElement('div'); r.className = 'mix';
+    r.innerHTML = '<div class="nm">' + (pi === partIdx ? '<b>Mijn stem</b> · ' : '') + esc(names[pi]) + '</div><input type="range" min="0" max="100" step="5" value="' + v + '" aria-label="' + esc(names[pi]) + '"><div class="pc">' + v + '%</div>';
+    const inp = r.querySelector('input'), pc = r.querySelector('.pc');
+    inp.oninput = () => { map[key] = inp.value / 100; pc.textContent = inp.value + '%'; if (run && run.kind === kind) applyMix(); };
+    inp.onchange = () => savePiece();
+    rows.append(r);
+  });
+  mix.append(rows);
+  const qb = document.createElement('div'); qb.className = 'qb';
+  const setOthers = v => { piece.parts.forEach((_, pi) => { if (pi !== partIdx) map[pi] = v; }); renderMix(); if (run && run.kind === kind) applyMix(); savePiece(); };
+  [['Andere stemmen uit', 0], ['Andere stemmen zacht', 0.3], ['Andere stemmen gelijk', 0.7]].forEach(([l, v]) => { const b = document.createElement('button'); b.textContent = l; b.onclick = () => setOthers(v); qb.append(b); });
+  mix.append(qb);
+  const note = document.createElement('div'); note.className = 'small';
+  note.textContent = kind === 'sing' ? 'Zo hoor je de stemmen terwijl je meezingt. Gebruik oordopjes, anders hoort de microfoon de stemmen mee en klopt de beoordeling niet.' : 'Zo hoor je de stemmen bij “Luister”.';
+  mix.append(note);
+  seg($('mixSeg'), [['L', 'Bij luisteren'], ['S', 'Bij meezingen']], O.mixMode, v => { O.mixMode = v; renderMix(); });
+  $('mixX').onclick = () => { mix.hidden = true; savePiece(); };
+}
+$('sMix').onclick = () => { if (!mix.hidden){ mix.hidden = true; return; } if (state === 'count' || state === 'sing') O.mixMode = 'S'; else if (state === 'listen') O.mixMode = 'L'; renderMix(); mix.hidden = false; };
+
+function jumpError(dir){
+  if (!run) return;
+  const bad = run.notes.filter(n => n.status && n.status.k !== 'ok');
+  if (!bad.length) return;
+  const cur = (geom ? geom.mnow : run.frozen) ;
+  let target = null;
+  if (dir > 0){ target = bad.find(n => n.s > cur + 0.25 - 0.0) || null; }
+  else { for (let i = bad.length - 1; i >= 0; i--) if (bad[i].s < cur - 0.25){ target = bad[i]; break; } }
+  if (!target) return;
+  sel = target; pan = target.s + 0.5 - run.frozen;
+}
+
 function showResult(){
   const ns = run.notes, tot = ns.length;
   const ok = ns.filter(n => n.status.k === 'ok').length, pct = tot ? Math.round(100 * ok / tot) : 0;
@@ -712,14 +826,19 @@ function showResult(){
   const byM = {}; bad.forEach(n => { byM[n.meas] = (byM[n.meas] || 0) + 1; });
   let worst = null, wc = 0; for (const k in byM) if (byM[k] > wc){ wc = byM[k]; worst = +k; }
   iss.innerHTML = '';
-  bad.slice(0, 5).forEach(n => {
+  bad.slice(0, 2).forEach(n => {
     const el = document.createElement('div'); el.className = 'issue';
     const lab = piece.measures[n.meas] ? piece.measures[n.meas].label : '?';
     const what = n.status.k === 'none' ? 'niet gehoord' : (n.status.k === 'high' ? 'te hoog' : 'te laag') + ' (' + (n.status.cents > 0 ? '+' : '−') + Math.round(Math.abs(n.status.cents)) + ' cent)';
     el.textContent = 'Maat ' + lab + ', ' + nm(n.m) + (n.lyr ? ' “' + n.lyr.replace(/-$/, '') + '”' : '') + ': ' + what;
     iss.append(el);
   });
-  if (bad.length > 5){ const el = document.createElement('div'); el.className = 'issue'; el.style.color = 'var(--mute)'; el.textContent = '… en ' + (bad.length - 5) + ' meer'; iss.append(el); }
+  if (bad.length > 2){ const el = document.createElement('div'); el.className = 'issue'; el.style.color = 'var(--mute)'; el.textContent = '… en ' + (bad.length - 2) + ' meer, gebruik de knoppen hieronder'; iss.append(el); }
+  const nav = document.createElement('div'); nav.id = 'nav';
+  nav.innerHTML = '<button id="navP">← Vorige fout</button><button id="navN">Volgende fout →</button>';
+  iss.append(nav);
+  nav.querySelector('#navP').onclick = () => jumpError(-1); nav.querySelector('#navN').onclick = () => jumpError(1);
+  const hint = document.createElement('div'); hint.className = 'small'; hint.textContent = 'Sleep het beeld om terug te kijken. Tik op een noot voor details.'; iss.append(hint);
   bt.innerHTML = '';
   const b1 = document.createElement('button'); b1.className = 'btn'; b1.textContent = 'Nog eens'; b1.onclick = () => start('sing');
   bt.append(b1);
@@ -735,6 +854,31 @@ function showResult(){
   }
   sres.hidden = false;
 }
+
+let drag = null;
+cvEl.addEventListener('pointerdown', e => {
+  if (!document.body.classList.contains('stuk') || state !== 'done' || !geom) return;
+  drag = { x: e.clientX, y: e.clientY, pan0: pan, moved: false };
+  try { cvEl.setPointerCapture(e.pointerId); } catch(_){}
+});
+cvEl.addEventListener('pointermove', e => {
+  if (!drag || !geom) return;
+  const dx = e.clientX - drag.x;
+  if (Math.abs(dx) > 4) drag.moved = true;
+  if (drag.moved) pan = drag.pan0 - dx / geom.pxps;
+});
+cvEl.addEventListener('pointerup', e => {
+  if (!drag || !geom){ drag = null; return; }
+  const d = drag; drag = null;
+  if (d.moved || !run) return;
+  const r = cvEl.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, g = geom;
+  const m = g.hi - Math.floor(y / g.rh);
+  if (x < g.KW){
+    const bus = C.ac.createGain(); bus.connect(C.ac.destination); playNote(bus, C.ac.currentTime + 0.03, 1.1, m, 0.4); return;
+  }
+  const t = g.mnow + (x - g.KW - g.phX) / g.pxps;
+  sel = run.notes.find(n => n.m === m && t >= n.s - 0.05 && t <= n.e + 0.05) || null;
+});
 
 window.NKstuk = {
   frame,
