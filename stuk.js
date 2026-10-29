@@ -243,7 +243,7 @@ function savePiece(){
   try {
     const pcs = piece ? { title: piece.title,
       parts: piece.parts.map(p => ({ name: p.name, notes: p.notes.map(n => [+n.b.toFixed(4), +n.d.toFixed(4), n.m, n.meas, n.lyr]) })),
-      measures: piece.measures.map(m => [m.i, m.label, +m.b.toFixed(4), +m.len.toFixed(4)]), tempo: piece.tempo, time: piece.time } : null;
+      measures: piece.measures.map(m => [m.i, m.label, +m.b.toFixed(4), +m.len.toFixed(4)]), tempo: piece.tempo, time: piece.time, kies: piece.kies || null } : null;
     localStorage.setItem(LS, JSON.stringify({ o: O, piece: pcs, partIdx, from, to }));
   } catch(e){}
 }
@@ -255,6 +255,7 @@ function restore(){
     piece = finishPiece({ title: p.title,
       parts: p.parts.map(q => ({ name: q.name, notes: q.notes.map(a => ({ b:a[0], d:a[1], m:a[2], meas:a[3], lyr:a[4] })) })),
       measures: p.measures.map(a => ({ i:a[0], label:a[1], b:a[2], len:a[3] })), tempo: p.tempo, time: p.time });
+    if (p.kies) piece.kies = p.kies;
     partIdx = Math.min(d.partIdx || 0, piece.parts.length - 1);
     const first = piece.measures[0].label, last = piece.measures[piece.measures.length-1].label;
     from = Math.max(first, d.from || first); to = Math.min(last, d.to || last);
@@ -784,7 +785,7 @@ function renderSetup(){
   $('partWrap').hidden = !piece;
   if (piece){
     const names = partNames();
-    seg($('partSeg'), names.map((n, i) => [i, n]), partIdx, v => { partIdx = v; prepare(); });
+    seg($('partSeg'), names.map((n, i) => [i, n]).filter(([i, n]) => !piece.kies || piece.kies.includes(n)), partIdx, v => { partIdx = v; prepare(); });
     const first = piece.measures[0].label, last = piece.measures[piece.measures.length - 1].label;
     $('mFrom').value = from; $('mTo').value = to;
     $('mHint').textContent = 'Maat ' + first + ' tot en met ' + last + ' beschikbaar.';
@@ -966,6 +967,12 @@ async function koorLoad(st){
       files.push(new File([await window.NKkoor.decrypt(koor.key, await r.arrayBuffer())], b.naam));
     }
     await loadFiles(files, false, st.titel);
+    if (st.kies && st.kies.length && piece){   // alleen deze stemmen als keuzeknop; de rest staat wel in de mixer
+      piece.kies = st.kies.slice();
+      const f = partNames().findIndex(n => piece.kies.includes(n));
+      if (f >= 0){ partIdx = f; prepare(); }
+      renderSetup(); savePiece();
+    }
     koorMsg('');
   } catch (e){ koorMsg('Dit stuk kon niet geladen worden. Probeer het opnieuw als je online bent.'); }
 }
