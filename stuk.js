@@ -877,7 +877,67 @@ function renderKoor(){
     b.innerHTML = '<span><b style="font-size:17px">' + esc(st.titel) + '</b></span><span style="color:var(--orange);font-weight:700;font-size:20px">›</span>';
     b.onclick = () => koorLoad(st);
     l.append(b);
+    if (st.pdf && st.pdf.length){
+      const p = document.createElement('button'); p.className = 'btn'; p.type = 'button';
+      p.style.cssText = 'flex:none;padding:7px 12px;margin:-4px 0 4px;font-size:14px;justify-self:start';
+      p.textContent = '⬇ PDF van dit stuk';
+      p.onclick = () => koorPdf([st]);
+      l.append(p);
+    }
   });
+  const nP = koor.idx.stukken.reduce((a, s) => a + ((s.pdf && s.pdf.length) || 0), 0);
+  if (nP){
+    const a = document.createElement('button'); a.className = 'go sec'; a.type = 'button'; a.style.marginTop = '6px';
+    a.textContent = '⬇ Alle PDF’s downloaden (' + nP + ')';
+    a.onclick = () => koorPdf(koor.idx.stukken);
+    l.append(a);
+  }
+}
+const crcT = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++){ let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+const crc32 = u => { let c = 0xFFFFFFFF; for (let i = 0; i < u.length; i++) c = crcT[(c ^ u[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+function zipStore(files){   // files: [{name, data:Uint8Array}] zonder compressie (pdf's zijn al gecomprimeerd)
+  const te = new TextEncoder(), parts = [], cen = []; let off = 0;
+  for (const f of files){
+    const nm = te.encode(f.name), crc = crc32(f.data), h = new DataView(new ArrayBuffer(30));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(8, 0, true);
+    h.setUint16(10, 0, true); h.setUint16(12, 0x21, true); h.setUint32(14, crc, true); h.setUint32(18, f.data.length, true); h.setUint32(22, f.data.length, true);
+    h.setUint16(26, nm.length, true); h.setUint16(28, 0, true);
+    parts.push(new Uint8Array(h.buffer), nm, f.data);
+    const c = new DataView(new ArrayBuffer(46));
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true); c.setUint16(10, 0, true);
+    c.setUint16(12, 0, true); c.setUint16(14, 0x21, true); c.setUint32(16, crc, true); c.setUint32(20, f.data.length, true); c.setUint32(24, f.data.length, true);
+    c.setUint16(28, nm.length, true); c.setUint32(42, off, true);
+    cen.push(new Uint8Array(c.buffer), nm);
+    off += 30 + nm.length + f.data.length;
+  }
+  let cl = 0; for (const x of cen) cl += x.length;
+  const e = new DataView(new ArrayBuffer(22));
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true); e.setUint32(12, cl, true); e.setUint32(16, off, true);
+  return new Blob([...parts, ...cen, new Uint8Array(e.buffer)], { type: 'application/zip' });
+}
+async function koorPdf(stukken){
+  const lijst = []; stukken.forEach(s => (s.pdf || []).forEach(p => lijst.push(p)));
+  if (!lijst.length) return;
+  koorMsg('PDF’s worden klaargemaakt…');
+  try {
+    const files = [];
+    for (const p of lijst){
+      const r = await fetch('koren/' + koor.id + '/' + p.id + '.nk');
+      if (!r.ok) throw new Error('fetch');
+      files.push({ name: p.naam, data: await window.NKkoor.decrypt(koor.key, await r.arrayBuffer()) });
+    }
+    let blob, naam;
+    if (files.length === 1){ blob = new Blob([files[0].data], { type: 'application/pdf' }); naam = files[0].name; }
+    else { blob = zipStore(files); naam = (koor.idx.koor || 'Koor').replace(/[^\w\- ]+/g, '') + ' PDFs.zip'; }
+    koorMsg('');
+    const file = new File([blob], naam, { type: blob.type });
+    if (navigator.canShare && navigator.canShare({ files: [file] })){
+      try { await navigator.share({ files: [file] }); return; } catch (e){ if (e && e.name === 'AbortError') return; }
+    }
+    const u = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = u; a.download = naam; document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(u), 60000);
+  } catch (e){ koorMsg('De PDF’s konden niet geladen worden. Probeer het opnieuw als je online bent.'); }
 }
 async function koorUnlock(code, quiet){
   const K = window.NKkoor;
