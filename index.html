@@ -977,7 +977,7 @@ async function startApp(want){
 $('goBtn').onclick = () => startApp('toon');
 $('goBtn2').onclick = () => startApp('stuk');
 
-window.NKcore = { get ac(){ return ac; }, get analyser(){ return analyser; }, get buf(){ return buf; }, get S(){ return S; }, detect, nm, isBlack, mtof, median };
+window.NKcore = { get stream(){ return stream; }, get ac(){ return ac; }, get analyser(){ return analyser; }, get buf(){ return buf; }, get S(){ return S; }, detect, nm, isBlack, mtof, median };
 
 let mode = 'toon';
 function setMode(m){

@@ -456,7 +456,7 @@ function scoreAll(rn, final){
    Bediening
    ========================================================= */
 function stopAll(){
-  stopAudio(run); run = null; state = 'idle'; sres.hidden = true; if (window.NKscore) NKscore.clearMarks(); refresh();
+  recDiscard(); stopAudio(run); run = null; state = 'idle'; sres.hidden = true; if (window.NKscore) NKscore.clearMarks(); refresh();
 }
 async function start(kind){
   if (!piece || !notes.length){ openSetup(); return; }
@@ -467,13 +467,13 @@ async function start(kind){
   const rn = buildRun(kind), now = C.ac.currentTime;
   if (kind === 'sing'){ rn.cs = now + 0.25; rn.t0 = rn.cs + rn.nPulse * rn.pulse; state = 'count'; }
   else { rn.t0 = now + 0.35; state = 'listen'; }
-  run = rn; startAudio(rn); refresh();
+  run = rn; startAudio(rn); if (kind === 'sing') recStart(); refresh();
 }
 // tussentijds stoppen met zingen: je krijgt toch een analyse van wat je gezongen hebt
 function stopSing(){
   if (!run || run.kind !== 'sing' || state !== 'sing'){ stopAll(); return; }
   const el = C.ac.currentTime - run.t0 - LAT;
-  stopAudio(run);
+  recStop(); stopAudio(run);
   run.notes = run.notes.filter(n => n.status || n.s + Math.min(0.3, (n.e - n.s) * 0.35) + 0.35 <= el);
   run.dur = Math.max(0.5, el);
   scoreAll(run, true);
@@ -483,7 +483,7 @@ function stopSing(){
 function finish(){
   if (!run) return;
   if (run.kind === 'sing'){
-    scoreAll(run, true); run.frozen = run.dur + 0.5; state = 'done'; saveAttempt(run); showResult();
+    recStop(); scoreAll(run, true); run.frozen = run.dur + 0.5; state = 'done'; saveAttempt(run); showResult();
   } else { stopAudio(run); run = null; state = 'idle'; }
   refresh();
 }
@@ -707,7 +707,7 @@ szoom.innerHTML = '<button id="zIn" aria-label="Inzoomen">+</button><button id="
 const shint = document.createElement('div'); shint.id = 'shint'; shint.className = 'stuk-only'; shint.textContent = '← Sleep om naar een andere maat te gaan →'; shint.hidden = true; stage.append(shint);
 const sno = document.createElement('div'); sno.id = 'snone'; sno.className = 'stuk-only'; sno.hidden = true; stage.append(sno);
 const sres = document.createElement('div'); sres.id = 'sres'; sres.className = 'stuk-only'; sres.hidden = true;
-sres.innerHTML = '<div class="top"><div class="badge" id="sbadge"></div><div style="min-width:0"><div id="stitle"></div><div id="sdetail"></div></div></div><div id="sissues"></div><div class="btns" id="sbtns"></div>';
+sres.innerHTML = '<div class="top"><div class="badge" id="sbadge"></div><div style="min-width:0"><div id="stitle"></div><div id="sdetail"></div></div></div><div id="sissues"></div><div id="srec"></div><div class="btns" id="sbtns"></div>';
 app.insertBefore(sres, $('bar'));
 
 const sbar = document.createElement('div'); sbar.id = 'sbar'; sbar.className = 'stuk-only';
@@ -747,7 +747,7 @@ sheet.innerHTML = `<div class="wrap">
 <button class="btn" id="vbBack" style="flex:none;padding:10px 14px">← Ander stuk kiezen</button>
 <h1 style="font-size:28px;margin-top:14px" id="vbTitle"></h1>
 <div class="small" id="vbInfo"></div>
-<div id="partWrap"><h2>Stem</h2><div class="seg" id="partSeg"></div><button class="go sec" id="histBtn" style="margin-top:12px">Mijn resultaten bij deze stem</button></div>
+<div id="partWrap"><h2>Stem</h2><div class="seg" id="partSeg"></div><button class="go sec" id="histBtn" style="margin-top:12px">Mijn resultaten bij deze stem</button><button class="go sec" id="recBtn" style="margin-top:10px">Mijn opnames</button></div>
 <h2>Maten</h2>
 <div class="stp"><input id="mFrom" type="number" inputmode="numeric" min="1"><span>tot en met</span><input id="mTo" type="number" inputmode="numeric" min="1"><button class="btn" id="mAll" style="flex:none;padding:11px 14px">Alles</button></div>
 <div class="small" id="mHint"></div>
@@ -1095,7 +1095,7 @@ function showResult(){
     $('stitle').textContent = 'Te kort om te beoordelen'; $('sdetail').textContent = 'Zing iets langer mee, dan krijg je een analyse van je noten.';
     $('sissues').innerHTML = ''; const bt0 = $('sbtns'); bt0.innerHTML = '';
     const b0 = document.createElement('button'); b0.className = 'btn main'; b0.textContent = 'Nog eens'; b0.onclick = () => start('sing'); bt0.append(b0);
-    sres.hidden = false; return;
+    renderRec(); sres.hidden = false; return;
   }
   const ok = ns.filter(n => n.status.k === 'ok').length, pct = tot ? Math.round(100 * ok / tot) : 0;
   const badge = $('sbadge'), t = $('stitle'), d = $('sdetail'), iss = $('sissues'), bt = $('sbtns');
@@ -1138,8 +1138,119 @@ function showResult(){
     b2.onclick = () => { from = piece.measures[0].label; to = piece.measures[piece.measures.length - 1].label; prepare(); previewKey = ''; savePiece(); start('sing'); };
     bt.append(b2);
   }
-  sres.hidden = false;
+  renderRec(); sres.hidden = false;
 }
+
+
+/* =========================================================
+   Eigen opnames: opnemen tijdens Zing mee, kiezen wat je bewaart, delen
+   ========================================================= */
+let recM = null, recChunks = [], take = null, recGen = 0;
+const recMime = () => { try { for (const t of ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus']) if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t; } catch(_){} return ''; };
+function recStart(){
+  recDiscard();
+  try {
+    if (!window.MediaRecorder || !C.stream) return;
+    const mt = recMime(), gen = ++recGen;
+    recChunks = [];
+    const m = new MediaRecorder(C.stream, mt ? { mimeType: mt } : undefined);
+    m.ondataavailable = e => { if (e.data && e.data.size) recChunks.push(e.data); };
+    m.onstop = () => {
+      if (gen !== recGen || m._drop){ recChunks = []; return; }
+      const blob = new Blob(recChunks, { type: m.mimeType || mt || 'audio/mp4' }); recChunks = [];
+      if (!blob.size) return;
+      take = { blob, mime: blob.type, url: URL.createObjectURL(blob), ts: Date.now(), from, to, titel: piece ? piece.title : '', stem: partNames()[partIdx] || '', pct: null, saved: false };
+      renderRec();
+    };
+    m.start(); recM = m;
+  } catch(e){ recM = null; }
+}
+function recStop(){
+  if (take && take.url && !take.saved){ try { URL.revokeObjectURL(take.url); } catch(_){} }
+  take = null;
+  if (recM && recM.state !== 'inactive'){ try { recM.stop(); } catch(_){} }
+  recM = null;
+}
+function recDiscard(){
+  recGen++;
+  if (recM){ recM._drop = true; if (recM.state !== 'inactive'){ try { recM.stop(); } catch(_){} } recM = null; }
+  if (take && take.url){ try { URL.revokeObjectURL(take.url); } catch(_){} }
+  take = null; recChunks = [];
+  const e = document.getElementById('srec'); if (e) e.innerHTML = '';
+}
+function recName(t){
+  const d = new Date(t.ts), rg = t.from === t.to ? 'maat ' + t.from : 'maat ' + t.from + '-' + t.to;
+  const ext = /mp4|m4a|aac/.test(t.mime) ? 'm4a' : (/ogg/.test(t.mime) ? 'ogg' : 'webm');
+  return (t.titel + ' - ' + t.stem + ' - ' + rg + ' - ' + d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }).replace(':', '.')).replace(/[\\/:*?"<>|]+/g, '') + '.' + ext;
+}
+async function recShare(t){
+  const file = new File([t.blob], recName(t), { type: t.mime });
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })){ await navigator.share({ files: [file], title: t.titel }); return; }
+  } catch(e){ if (e && e.name === 'AbortError') return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(t.blob); a.download = file.name; document.body.append(a); a.click(); setTimeout(() => { a.remove(); }, 500);
+}
+// opslag
+const odb = () => new Promise((res, rej) => {
+  const q = indexedDB.open('naklank-opn', 1);
+  q.onupgradeneeded = () => q.result.createObjectStore('opn', { keyPath: 'id', autoIncrement: true });
+  q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error);
+});
+async function opnAll(){ const d = await odb(); return new Promise((res, rej) => { const r = d.transaction('opn').objectStore('opn').getAll(); r.onsuccess = () => res(r.result.sort((a, b) => b.ts - a.ts)); r.onerror = () => rej(r.error); }); }
+async function opnPut(o){ const d = await odb(); return new Promise((res, rej) => { const r = d.transaction('opn', 'readwrite').objectStore('opn').put(o); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
+async function opnDel(id){ const d = await odb(); return new Promise((res, rej) => { const r = d.transaction('opn', 'readwrite').objectStore('opn').delete(id); r.onsuccess = () => res(); r.onerror = () => rej(r.error); }); }
+function renderRec(){
+  const el = document.getElementById('srec'); if (!el) return;
+  el.innerHTML = '';
+  if (!take){ if (recM && recM.state !== 'inactive') el.innerHTML = '<div class="small">Je opname wordt klaargezet…</div>'; return; }
+  if (run && run.notes && run.notes.length && take.pct == null){ const ok = run.notes.filter(n => n.status && n.status.k === 'ok').length; take.pct = Math.round(100 * ok / run.notes.length); }
+  const box = document.createElement('div'); box.className = 'recbox';
+  box.innerHTML = '<div class="small" style="margin:10px 0 4px"><b>Je opname</b></div>';
+  const au = document.createElement('audio'); au.controls = true; au.src = take.url; au.style.width = '100%'; au.preload = 'metadata'; box.append(au);
+  const row = document.createElement('div'); row.className = 'btns'; row.style.marginTop = '8px';
+  const mk = (txt, fn, cls) => { const b = document.createElement('button'); b.className = 'btn' + (cls ? ' ' + cls : ''); b.textContent = txt; b.onclick = fn; row.append(b); return b; };
+  if (!take.saved){
+    const bs = mk('Bewaar opname', async () => {
+      try {
+        const o = { ts: take.ts, titel: take.titel, stem: take.stem, from: take.from, to: take.to, pct: take.pct, mime: take.mime, blob: take.blob };
+        o.id = await opnPut(o); take.id = o.id; take.saved = true; renderRec();
+      } catch(e){ bs.textContent = 'Opslaan lukt niet'; }
+    }, 'main');
+    mk('Weggooien', () => { recDiscard(); renderRec(); });
+  } else {
+    const sv = document.createElement('div'); sv.className = 'small'; sv.textContent = 'Bewaard bij “Mijn opnames”.'; box.append(sv);
+    mk('Delen', () => recShare(take), 'main');
+    mk('Verwijderen', async () => { try { await opnDel(take.id); } catch(_){} recDiscard(); renderRec(); });
+  }
+  box.append(row); el.append(box);
+}
+const opnSheet = document.createElement('div'); opnSheet.className = 'sheet stuk-only'; opnSheet.id = 'sopn'; opnSheet.hidden = true; document.body.append(opnSheet);
+let opnUrl = null, opnArm = null;
+async function openOpn(){
+  opnSheet.hidden = false; opnSheet.scrollTop = 0;
+  opnSheet.innerHTML = '<div class="wrap"><h1 style="font-size:30px">Mijn opnames</h1><div class="small" id="oSub"></div><div id="oList" style="margin-top:12px"></div><button class="go" id="oTerug" style="margin-top:16px">Terug</button></div>';
+  $('oTerug').onclick = () => { opnSheet.hidden = true; if (opnUrl){ try { URL.revokeObjectURL(opnUrl); } catch(_){} opnUrl = null; } const a = opnSheet.querySelector('audio'); if (a) a.pause(); };
+  let list = [];
+  try { list = await opnAll(); } catch(e){ $('oSub').textContent = 'Opnames zijn op dit apparaat niet beschikbaar.'; return; }
+  $('oSub').textContent = list.length ? 'Alleen op dit apparaat bewaard. Tik op Delen om er één door te sturen.' : 'Je hebt nog geen opnames bewaard. Zing mee en kies na afloop “Bewaar opname”.';
+  const ol = $('oList');
+  list.forEach(o => {
+    const d = new Date(o.ts), rg = o.from === o.to ? 'maat ' + o.from : 'maat ' + o.from + '–' + o.to;
+    const r = document.createElement('div'); r.className = 'hrow'; r.style.flexWrap = 'wrap'; r.style.gap = '8px';
+    r.innerHTML = '<div class="t"><b></b><small></small></div>';
+    r.querySelector('b').textContent = o.titel + ' · ' + o.stem;
+    r.querySelector('small').textContent = d.toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + ' · ' + rg + (o.pct != null ? ' · ' + o.pct + '% goed' : '');
+    const au = document.createElement('audio'); au.controls = true; au.preload = 'none'; au.style.width = '100%'; au.src = URL.createObjectURL(o.blob);
+    au.onplay = () => { opnSheet.querySelectorAll('audio').forEach(x => { if (x !== au) x.pause(); }); };
+    const bd = document.createElement('button'); bd.textContent = 'Delen'; bd.onclick = () => recShare(o);
+    const bx = document.createElement('button'); bx.textContent = 'Verwijder'; bx.onclick = async () => {
+      if (opnArm !== o.id){ opnArm = o.id; bx.textContent = 'Zeker weten?'; setTimeout(() => { if (opnArm === o.id){ opnArm = null; bx.textContent = 'Verwijder'; } }, 3500); return; }
+      opnArm = null; try { await opnDel(o.id); } catch(_){} openOpn();
+    };
+    r.append(bd, bx, au); ol.append(r);
+  });
+}
+$('recBtn').onclick = openOpn;
 
 let drag = null;
 cvEl.addEventListener('pointerdown', e => {
@@ -1377,7 +1488,7 @@ function scoreFrame(mnow){
 window.NKstuk = {
   frame,
   enter(){ medBuf = []; if (!piece && restore()) prepare(); if (piece && !piece.xml && window.NKscore) NKscore.loadXml(piece.title).then(x => { if (x && piece && !piece.xml) piece.xml = x; }); koorAuto().then(() => { if (!sheet.hidden) renderSetup(); }); openSetup('A'); },
-  leave(){ stopAll(); sheet.hidden = true; hist.hidden = true; if (window.NKscore) NKscore.hide(); },
+  leave(){ stopAll(); sheet.hidden = true; hist.hidden = true; opnSheet.hidden = true; if (window.NKscore) NKscore.hide(); },
   _t: { parseXML, parseMidi, parseFile, reduce, evalNote, demoPiece, finishPiece, get state(){ return state; }, get run(){ return run; }, get notes(){ return notes; }, setPiece, get piece(){ return piece; } }
 };
 })();
