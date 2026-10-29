@@ -318,7 +318,26 @@ function buildRun(kind, f0, t0){
 /* =========================================================
    Geluid
    ========================================================= */
-function playNote(bus, t, d, m, vol, own){
+const isPiano = p => /piano|klavier|vleugel|keyboard|toetsen/i.test(p && p.name || '');
+// pianogeluid: korte aanslag, daarna uitklinkend; hogere tonen sneller weg
+function playPiano(bus, t, d, m, vol){
+  const ac = C.ac, f = mtof(m), g = ac.createGain(), v = vol * 0.8;
+  const ring = Math.max(0.25, Math.min(d + 0.35, 2.6 - (m - 48) * 0.02));
+  const end = t + ring;
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(v, t + 0.006);
+  g.gain.exponentialRampToValueAtTime(v * 0.35, t + Math.min(0.35, ring * 0.4));
+  g.gain.exponentialRampToValueAtTime(0.0008, end);
+  const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = Math.min(6000, f * 7); lp.Q.value = 0.3;
+  g.connect(lp); lp.connect(bus);
+  [[1,1,'sine'],[2,.5,'sine'],[3,.28,'sine'],[4,.14,'triangle'],[5,.07,'sine']].forEach(([k, a, ty]) => {
+    if (f * k > 9000) return;
+    const o = ac.createOscillator(); o.type = ty; o.frequency.value = f * k; o.detune.value = (k - 1) * 1.5;
+    const gg = ac.createGain(); gg.gain.setValueAtTime(a / 2.0, t); gg.gain.exponentialRampToValueAtTime(a / 2.0 * 0.15, t + Math.max(0.2, ring / k));
+    o.connect(gg); gg.connect(g); o.start(t); o.stop(end + 0.03);
+  });
+}
+function playNote(bus, t, d, m, vol, own, piano){
+  if (piano && !own) return playPiano(bus, t, d, m, vol);
   const ac = C.ac, f = mtof(m), g = ac.createGain();
   if (own){   // eigen stem: helderder, 'rietachtig' geluid zodat je hem makkelijk herkent
     const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2300; lp.Q.value = 0.7;
@@ -377,10 +396,11 @@ function startAudio(rn){
     for (let k = 0; k < rn.nPulse; k++) ev.push({ t: rn.cs + k * rn.pulse, click: true, accent: k === 0 });
   }
   piece.parts.forEach((p, pi) => {
-    for (const n of reducedOf(p)){
+    const pno = isPiano(p) && pi !== partIdx;
+    for (const n of (pno ? p.notes : reducedOf(p))){
       if (n.b < rn.bS - 1e-6 || n.b >= rn.bE - 1e-6) continue;
       const s0 = rn.sec(n.b);
-      ev.push({ t: rn.t0 + s0, d: rn.sec(Math.min(n.b + n.d, rn.bE)) - s0, m: n.m, vol: 0.32, pi });
+      ev.push({ t: rn.t0 + s0, d: rn.sec(Math.min(n.b + n.d, rn.bE)) - s0, m: n.m, vol: 0.32, pi, pno });
     }
   });
   ev.sort((a, b) => a.t - b.t);
@@ -395,7 +415,7 @@ function startAudio(rn){
     while (i < ev.length && ev[i].t < lim){
       const e = ev[i++];
       if (e.t < ac.currentTime - 0.05) continue;
-      if (e.click) click(bus, e.t, e.accent); else playNote(rn.partBus[e.pi], e.t, e.d, e.m, e.vol, e.pi === partIdx);
+      if (e.click) click(bus, e.t, e.accent); else playNote(rn.partBus[e.pi], e.t, e.d, e.m, e.vol, e.pi === partIdx, e.pno);
     }
     if (i >= ev.length && ci >= rn.clicks.length) { clearInterval(rn.timer); rn.timer = null; }
   };
