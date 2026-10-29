@@ -368,7 +368,7 @@ const reducedOf = p => { let r = redCache.get(p); if (!r || r.chord !== O.chord)
 function volOf(kind, pi){
   const m = kind === 'sing' ? O.volS : O.volL;
   if (pi === partIdx){ const v = m.own; return v != null ? v : 1; }
-  const v = m[pi]; return v != null ? v : 0.1;
+  const v = m[pi]; return v != null ? v : (isPiano(piece && piece.parts[pi]) ? 0.45 : 0.1);
 }
 function applyMix(){
   if (!run || !run.partBus) return;
