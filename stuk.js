@@ -231,7 +231,7 @@ async function parseFile(file){
 /* =========================================================
    Stuk, stem, tijdlijn
    ========================================================= */
-const DEF = { chord:'top', speed:1, click:false, volL:{}, volS:{}, mixMode:'L', zoom:1 };
+const DEF = { chord:'top', level:'medium', speed:1, click:false, volL:{}, volS:{}, mixMode:'L', zoom:1 };
 let O = loadO();
 let piece = null, partIdx = 0, from = 1, to = 1, notes = [];
 let state = 'idle';     // idle | count | listen | sing | done
@@ -432,6 +432,50 @@ function stopAudio(rn){
 /* =========================================================
    Beoordeling per noot
    ========================================================= */
+// niveaus: hoe ruim de toonhoogte (cent) en het ritme (seconden) beoordeeld worden
+const LEVELS = {
+  easy:   { name: 'Easy',   tol: 50, on: 0.40, off: 0.60 },
+  medium: { name: 'Medium', tol: 40, on: 0.25, off: 0.40 },
+  hard:   { name: 'Hard',   tol: 30, on: 0.15, off: 0.25 }
+};
+const curLvl = () => LEVELS[O.level] || LEVELS.medium;
+const RHY = { early: 1, late: 1, short: 1, long: 1 };
+function foldDev(d){ return C.S.octave ? ((d + 6) % 12 + 12) % 12 - 6 : d; }
+function rhythmOf(rn, n){
+  const L = curLvl(), i = rn._ix ? rn._ix.get(n) : rn.notes.indexOf(n);
+  const prev = rn.notes[i - 1], next = rn.notes[i + 1];
+  const close = f => f.m != null && Math.abs(foldDev(f.m - n.m)) <= 1.0;
+  const T = rn.t0 + n.s + LAT, TE = rn.t0 + n.e + LAT, fr = rn.frames;
+  // begin: alleen als het begin goed te horen is (pauze ervoor of een andere toon ervoor)
+  const canOn = !prev || prev.e < n.s - 0.08 || Math.abs(foldDev(prev.m - n.m)) > 1.3;
+  if (canOn){
+    let on = null;
+    for (let j = 0; j + 2 < fr.length; j++){
+      const f = fr[j]; if (f.t < T - 0.5) continue; if (f.t > T + 0.6) break;
+      if (close(f) && close(fr[j + 1]) && close(fr[j + 2])){ on = f.t; break; }
+    }
+    if (on != null){
+      const d = on - T;
+      if (d > L.on) return { k: 'late', dt: d };
+      if (d < -L.on) return { k: 'early', dt: d };
+    }
+  }
+  // einde: alleen bij een pauze erna (anders is het einde niet te horen)
+  const canOff = !next || next.s - n.e >= 0.3;
+  if (canOff && n.e - n.s >= 0.3){
+    let last = null;
+    for (let j = 0; j < fr.length; j++){
+      const f = fr[j]; if (f.t < T) continue; if (f.t > TE + L.off + 0.15) break;
+      if (close(f)) last = f.t;
+    }
+    if (last != null){
+      const e = last - TE;
+      if (e < -L.off) return { k: 'short', dt: e };
+      if (e > L.off) return { k: 'long', dt: e };
+    }
+  }
+  return null;
+}
 function evalNote(rn, n){
   const dur = n.e - n.s, skip = Math.min(0.3, dur * 0.35);
   const a = rn.t0 + n.s + skip + LAT, b = rn.t0 + n.e + LAT - 0.03;
@@ -440,14 +484,18 @@ function evalNote(rn, n){
   if (tot < 2 || v.length < 2 || v.length < 0.3 * tot) return { k: 'none' };
   const med = median(v); let dev = med - n.m;
   if (C.S.octave) dev = ((dev + 6) % 12 + 12) % 12 - 6;
-  const cents = dev * 100, tol = C.S.tol * (dur < 0.25 ? 1.6 : 1);
-  return { k: Math.abs(cents) <= tol ? 'ok' : (cents > 0 ? 'high' : 'low'), cents, sung: med };
+  const cents = dev * 100, tol = curLvl().tol * (dur < 0.25 ? 1.6 : 1);
+  if (Math.abs(cents) > tol) return { k: cents > 0 ? 'high' : 'low', cents, sung: med };
+  const r = rhythmOf(rn, n);
+  if (r) return { k: r.k, dt: r.dt, cents, sung: med };
+  return { k: 'ok', cents, sung: med };
 }
 function scoreAll(rn, final){
   const now = C.ac.currentTime;
+  if (!rn._ix || rn._ixn !== rn.notes.length){ rn._ix = new Map(rn.notes.map((x, i) => [x, i])); rn._ixn = rn.notes.length; }
   for (const n of rn.notes){
     if (n.status) continue;
-    if (!final && now < rn.t0 + n.e + LAT + 0.05) break;
+    if (!final && now < rn.t0 + n.e + LAT + 0.05 + curLvl().off + 0.2) break;
     n.status = evalNote(rn, n);
   }
 }
@@ -544,7 +592,7 @@ function frame(ctx, W, H, dpr){
       const active = mnow >= n.s && mnow < n.e; if (active) activeM = n.m;
       const st = n.status;
       let fill = active ? 'rgba(60,207,122,.85)' : 'rgba(60,207,122,.5)';
-      if (st){ fill = st.k === 'ok' ? '#3ccf7a' : st.k === 'none' ? '#6b7080' : '#ff6b5e'; }
+      if (st){ fill = st.k === 'ok' ? '#3ccf7a' : st.k === 'none' ? '#6b7080' : RHY[st.k] ? '#f2b233' : '#ff6b5e'; }
       const y = rowY(n.m) + (rh - bh) / 2, w = Math.max(3, x1 - x0 - 1.5);
       ctx.fillStyle = fill;
       ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x0, y, w, bh, 3); else ctx.rect(x0, y, w, bh); ctx.fill();
@@ -752,6 +800,8 @@ sheet.innerHTML = `<div class="wrap">
 <div class="stp"><input id="mFrom" type="number" inputmode="numeric" min="1"><span>tot en met</span><input id="mTo" type="number" inputmode="numeric" min="1"><button class="btn" id="mAll" style="flex:none;padding:11px 14px">Alles</button></div>
 <div class="small" id="mHint"></div>
 <h2>Tempo</h2><div class="seg" id="spdSeg"></div>
+<h2>Niveau</h2><div class="seg" id="lvlSeg"></div>
+<div class="small" id="lvlHint"></div>
 <h2>Bij gedeelde stemmen</h2><div class="seg" id="chordSeg"></div>
 <div class="small">Heeft een stem op één moment twee noten, dan oefen je de bovenste of onderste.</div>
 <div class="small" style="margin-top:14px">Het volume van elke stem stel je in met de knop “Mixer” onderin het scherm. Gebruik oordopjes als er stemmen meespelen tijdens het zingen.</div>
@@ -791,6 +841,9 @@ function renderSetup(){
     $('mHint').textContent = 'Maat ' + first + ' tot en met ' + last + ' beschikbaar.';
   }
   seg($('spdSeg'), [[.5, '50%'], [.7, '70%'], [.85, '85%'], [1, '100%']], O.speed, v => { O.speed = v; });
+  { const lh = { easy: 'Ruim: toon mag ±50 cent afwijken en het ritme ongeveer 0,4 seconde.', medium: 'Gemiddeld: toon ±40 cent, ritme ongeveer 0,25 seconde.', hard: 'Streng: toon ±30 cent, ritme ongeveer 0,15 seconde.' };
+    seg($('lvlSeg'), [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard']], O.level, v => { O.level = v; $('lvlHint').textContent = lh[v]; });
+    $('lvlHint').textContent = lh[O.level] || ''; }
   seg($('chordSeg'), [['top', 'Bovenste noot'], ['bottom', 'Onderste noot']], O.chord, v => { O.chord = v; prepare(); });
   $('swClick').classList.toggle('on', O.click); $('sMet').classList.toggle('on', O.click);
 }
@@ -1022,7 +1075,7 @@ function updateHead(){
   a.innerHTML = '<b>' + esc(names[partIdx]) + '</b> · maat ' + from + (to !== from ? '–' + to : '') + ' · ' + Math.round(O.speed * 100) + '%';
   if (state === 'done' && sel && sel.status){
     const st = sel.status, lab = piece.measures[sel.meas] ? piece.measures[sel.meas].label : '?';
-    const what = st.k === 'ok' ? 'goed' : st.k === 'none' ? 'niet gehoord' : (st.k === 'high' ? 'te hoog' : 'te laag') + ' (' + (st.cents > 0 ? '+' : '−') + Math.round(Math.abs(st.cents)) + ' cent)';
+    const what = wat(st);
     a.innerHTML = 'Maat ' + lab + ' · <b>' + nm(sel.m) + '</b>' + (sel.lyr ? ' “' + esc(sel.lyr.replace(/-$/, '')) + '”' : '') + ': ' + what;
   }
   if (run && run.kind === 'sing'){
@@ -1030,6 +1083,7 @@ function updateHead(){
     b.textContent = '✓ ' + ok + '/' + run.notes.length;
   } else b.textContent = notes.length + ' noten';
 }
+const wat = st => st.k === 'ok' ? 'goed' : st.k === 'none' ? 'niet gehoord' : RHY[st.k] ? ({ late: 'te laat begonnen', early: 'te vroeg begonnen', short: 'te kort aangehouden', long: 'te lang aangehouden' })[st.k] + ' (' + Math.abs(st.dt).toFixed(1).replace('.', ',') + ' s)' : (st.k === 'high' ? 'te hoog' : 'te laag') + ' (' + (st.cents > 0 ? '+' : '−') + Math.round(Math.abs(st.cents)) + ' cent)';
 const esc = s => String(s).replace(/[&<>]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[c]));
 
 function refresh(){
@@ -1104,7 +1158,8 @@ function showResult(){
   else { badge.textContent = pct + '%'; badge.style.fontSize = '20px'; }
   if (pct >= 85) badge.style.fontSize = '';
   t.textContent = pct >= 90 ? 'Sterk gezongen!' : pct >= 70 ? 'Goed bezig' : pct >= 40 ? 'Nog even oefenen' : 'Probeer het rustiger';
-  d.textContent = ok + ' van ' + tot + ' noten goed (' + pct + '%).';
+  const nr = ns.filter(n => RHY[n.status.k]).length;
+  d.textContent = ok + ' van ' + tot + ' noten goed (' + pct + '%).' + (nr ? ' Bij ' + nr + ' noten klopte de toon, maar het ritme niet.' : '');
   const bad = ns.filter(n => n.status.k !== 'ok');
   const byM = {}; bad.forEach(n => { byM[n.meas] = (byM[n.meas] || 0) + 1; });
   let worst = null, wc = 0; for (const k in byM) if (byM[k] > wc){ wc = byM[k]; worst = +k; }
@@ -1112,7 +1167,7 @@ function showResult(){
   bad.slice(0, 2).forEach(n => {
     const el = document.createElement('div'); el.className = 'issue';
     const lab = piece.measures[n.meas] ? piece.measures[n.meas].label : '?';
-    const what = n.status.k === 'none' ? 'niet gehoord' : (n.status.k === 'high' ? 'te hoog' : 'te laag') + ' (' + (n.status.cents > 0 ? '+' : '−') + Math.round(Math.abs(n.status.cents)) + ' cent)';
+    const what = wat(n.status);
     el.textContent = 'Maat ' + lab + ', ' + nm(n.m) + (n.lyr ? ' “' + n.lyr.replace(/-$/, '') + '”' : '') + ': ' + what;
     iss.append(el);
   });
@@ -1295,7 +1350,7 @@ cvEl.addEventListener('pointerup', e => {
 /* =========================================================
    Opslaan en voortgang per stem
    ========================================================= */
-const HK = 'naklank-hist', KC = { ok: 'o', high: 'h', low: 'l', none: 'n' }, CK = { o: 'ok', h: 'high', l: 'low', n: 'none' };
+const HK = 'naklank-hist', KC = { ok: 'o', high: 'h', low: 'l', none: 'n', early: 'v', late: 'z', short: 's', long: 'g' }, CK = { o: 'ok', h: 'high', l: 'low', n: 'none', v: 'early', z: 'late', s: 'short', g: 'long' };
 const histAll = () => { try { return JSON.parse(localStorage.getItem(HK)) || {}; } catch(e){ return {}; } };
 function histPut(h){
   for (let tries = 0; tries < 10; tries++){
@@ -1317,7 +1372,7 @@ function saveAttempt(rn){
   });
   const fr = []; let lt = -9;
   for (const f of rn.frames){ const t = f.t - rn.t0; if (t - lt < 0.05) continue; lt = t; fr.push(Math.round(t * 100) / 100, f.m == null ? -1 : Math.round(f.m * 10) / 10); }
-  const a = { ts: Date.now(), from, to, speed: O.speed, chord: O.chord, ok, tot: rn.notes.length, meas, st: rn.notes.map(n => [KC[n.status.k], n.status.cents != null ? Math.round(n.status.cents) : 0]), fr };
+  const a = { ts: Date.now(), from, to, speed: O.speed, chord: O.chord, ok, tot: rn.notes.length, meas, st: rn.notes.map(n => [KC[n.status.k], RHY[n.status.k] ? Math.round(n.status.dt * 1000) : (n.status.cents != null ? Math.round(n.status.cents) : 0)]), fr };
   const h = histAll(), k = histKey(); (h[k] = h[k] || []).unshift(a); h[k].length = Math.min(h[k].length, 10); histPut(h);
 }
 // goed / wankel / opnieuw per maat, op basis van de laatste drie keer dat de maat gezongen is
@@ -1391,7 +1446,7 @@ function reviewAttempt(a){
   const rn = buildRun('sing');
   if (rn.notes.length !== a.st.length){ hist.querySelector('#hSub').textContent = 'Deze opname past niet meer bij het stuk (het stuk is veranderd).'; return; }
   rn.t0 = 0;
-  rn.notes.forEach((n, i) => { const k = CK[a.st[i][0]] || 'none', c = a.st[i][1]; n.status = { k, cents: c, sung: n.m + c / 100 }; });
+  rn.notes.forEach((n, i) => { const k = CK[a.st[i][0]] || 'none', c = a.st[i][1]; n.status = RHY[k] ? { k, cents: 0, sung: n.m, dt: c / 1000 } : { k, cents: c, sung: n.m + c / 100 }; });
   for (let i = 0; i + 1 < a.fr.length; i += 2) rn.frames.push({ t: a.fr[i], m: a.fr[i + 1] < 0 ? null : a.fr[i + 1] });
   run = rn; state = 'done'; run.frozen = run.dur + 0.5; pan = 0; sel = null; lastPan = 0;
   savePiece(); hist.hidden = true; sheet.hidden = true; mix.hidden = true;
@@ -1489,6 +1544,6 @@ window.NKstuk = {
   frame,
   enter(){ medBuf = []; if (!piece && restore()) prepare(); if (piece && !piece.xml && window.NKscore) NKscore.loadXml(piece.title).then(x => { if (x && piece && !piece.xml) piece.xml = x; }); koorAuto().then(() => { if (!sheet.hidden) renderSetup(); }); openSetup('A'); },
   leave(){ stopAll(); sheet.hidden = true; hist.hidden = true; opnSheet.hidden = true; if (window.NKscore) NKscore.hide(); },
-  _t: { parseXML, parseMidi, parseFile, reduce, evalNote, demoPiece, finishPiece, get state(){ return state; }, get run(){ return run; }, get notes(){ return notes; }, setPiece, get piece(){ return piece; } }
+  _t: { parseXML, parseMidi, parseFile, reduce, evalNote, get O(){ return O; }, LAT, demoPiece, finishPiece, get state(){ return state; }, get run(){ return run; }, get notes(){ return notes; }, setPiece, get piece(){ return piece; } }
 };
 })();
