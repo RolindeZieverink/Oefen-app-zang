@@ -132,6 +132,14 @@ h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
 .nc.bad{background:rgba(255,107,94,.18);color:#ffb4ac}
 #lvlUp{margin-top:8px;padding:8px 12px;border-radius:10px;background:rgba(232,137,12,.16);color:#ffcf8a;font-size:14px;font-weight:650}
 #lvlUp:empty{display:none}
+#chip{cursor:pointer}
+#lvList{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+.lv{display:flex;gap:14px;align-items:center;text-align:left;padding:12px 14px;border-radius:14px;background:#2b2f37;color:var(--ink);width:100%}
+.lv.on{background:rgba(232,137,12,.22);box-shadow:inset 0 0 0 2px var(--orange)}
+.lv .n{flex:none;width:34px;height:34px;border-radius:10px;background:#3a3e48;display:grid;place-items:center;font-weight:700;color:var(--orange)}
+.lv.on .n{background:var(--orange);color:#1c1105}
+.lv .t b{display:block;font-size:16px}
+.lv .t small{display:block;color:var(--mute);font-size:13px;margin-top:2px}
 </style>
 </head>
 <body>
@@ -177,12 +185,21 @@ h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
   </div>
 </div>
 
+<!-- niveaus -->
+<div class="sheet" id="lvls" hidden>
+  <div class="wrap">
+    <h1 style="font-size:32px">Kies niveau</h1>
+    <p class="lead">Tik op een niveau om dat te oefenen. Gaat het vaak goed, dan stap je vanzelf door naar het volgende.</p>
+    <div id="lvList"></div>
+    <button class="go sec" id="lvClose">Sluiten</button>
+  </div>
+</div>
+
 <!-- instellingen -->
 <div class="sheet" id="settings" hidden>
   <div class="wrap">
     <h1 style="font-size:32px">Instellingen</h1>
-    <h2>Soort oefening</h2><div class="seg" id="gameSet"></div>
-    <div id="lvlBox"><h2>Niveau</h2><div class="seg" id="lvlSet"></div><p class="note" id="lvlName"></p></div>
+    <h2>Niveau</h2><button class="go sec" id="lvOpen" style="margin-top:0"></button>
     <h2>Stemgroep</h2><div class="seg" id="voiceSet"></div>
     <h2>Hoe streng?</h2><div class="seg" id="tolSet"></div>
     <h2>Lengte van de toon</h2><div class="seg" id="durSet"></div>
@@ -216,14 +233,14 @@ function saveStats(){ try { localStorage.setItem('naklank-stats', JSON.stringify
 
 /* ---------- spel: niveaus, sterren, reeksen ---------- */
 const LEVELS = [null,
-  { n:1, step:0, rh:0, tol:40, name:'Eén toon' },
-  { n:2, step:2, rh:0, tol:40, name:'Twee tonen, dicht bij elkaar' },
-  { n:2, step:5, rh:0, tol:38, name:'Twee tonen, grotere stap' },
-  { n:3, step:4, rh:0, tol:35, name:'Drie tonen achter elkaar' },
-  { n:3, step:7, rh:0, tol:35, name:'Drie tonen, grotere sprongen' },
-  { n:4, step:5, rh:1, tol:35, name:'Vier tonen met ritme' },
-  { n:4, step:7, rh:2, tol:30, name:'Ritme met pauzes' },
-  { n:5, step:7, rh:2, tol:25, name:'Meesterklas (5 of 6 tonen)' }
+  { n:1, step:0, rh:0, tol:40, desc:'Eén toon horen en nazingen', name:'Eén toon' },
+  { n:2, step:2, rh:0, tol:40, desc:'Kleine stapjes tussen de tonen', name:'Twee tonen, dicht bij elkaar' },
+  { n:2, step:5, rh:0, tol:38, desc:'Grotere stappen tussen de tonen', name:'Twee tonen, grotere stap' },
+  { n:3, step:4, rh:0, tol:35, desc:'Onthoud drie tonen in een rij', name:'Drie tonen achter elkaar' },
+  { n:3, step:7, rh:0, tol:35, desc:'Drie tonen met grotere sprongen', name:'Drie tonen, grotere sprongen' },
+  { n:4, step:5, rh:1, tol:35, desc:'Korte en lange tonen door elkaar', name:'Vier tonen met ritme' },
+  { n:4, step:7, rh:2, tol:30, desc:'Korte en lange tonen, met pauzes ertussen', name:'Ritme met pauzes' },
+  { n:5, step:7, rh:2, tol:25, desc:'Langste reeksen, strenger beoordeeld', name:'Meesterklas (5 of 6 tonen)' }
 ];
 const MAXL = 8, PIPS = 5;
 const DEFG = { lvl:1, maxLvl:1, pips:0, streak:0, best:0, stars:0, bad:0, days:0, last:'' };
@@ -755,11 +772,11 @@ const svgDown = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stro
 function hud(){
   const c = $('chip');
   if (!gameOn()){
-    c.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg><span>' + stats.first + '/' + stats.rounds + '</span>';
+    c.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg><span>' + stats.first + '/' + stats.rounds + '</span><span>▾</span>';
     return;
   }
   let p = ''; for (let i = 0; i < PIPS; i++) p += '<i class="' + (i < G.pips ? 'on' : '') + '"></i>';
-  c.innerHTML = '<b>Niv ' + G.lvl + '</b><span class="pips">' + p + '</span><span class="st">★ ' + G.stars + '</span>' +
+  c.innerHTML = '<b>Niv ' + G.lvl + ' ▾</b><span class="pips">' + p + '</span><span class="st">★ ' + G.stars + '</span>' +
     (G.streak >= 2 ? '<span class="fire">🔥 ' + G.streak + '</span>' : '') + (G.days >= 2 ? '<span>📅 ' + G.days + '</span>' : '');
 }
 const starStr = k => k ? '★'.repeat(k) + '☆'.repeat(3 - k) : '';
@@ -892,13 +909,7 @@ function seg_(el, items, cur, on){
 const voiceItems = Object.keys(VOICES).map(k => [k, VOICES[k].label]);
 function renderVoice(el){ seg_(el, voiceItems, S.voice, v => { S.voice = v; saveS(); lastTarget = -1; }); }
 function renderSettings(){
-  seg_($('gameSet'), [[true, 'Spel met niveaus'], [false, 'Vrij oefenen']], !!S.game, v => { S.game = v; saveS(); hud(); renderSettings(); });
-  $('lvlBox').hidden = !S.game;
-  if (S.game){
-    const it = []; for (let i = 1; i <= G.maxLvl; i++) it.push([i, String(i)]);
-    seg_($('lvlSet'), it, G.lvl, v => { G.lvl = v; G.pips = 0; G.bad = 0; saveG(); hud(); $('lvlName').textContent = LEVELS[v].name; });
-    $('lvlName').textContent = LEVELS[G.lvl].name + (G.maxLvl < MAXL ? '. Hogere niveaus ontgrendel je door te spelen.' : '.');
-  }
+  $('lvOpen').textContent = gameOn() ? 'Niveau ' + G.lvl + ': ' + LEVELS[G.lvl].name + ' (wijzigen)' : 'Vrij oefenen (kies een niveau)';
   renderVoice($('voiceSet'));
   seg_($('tolSet'), [[20,'Streng ±20'],[35,'Normaal ±35'],[50,'Ruim ±50']], S.tol, v => { S.tol = v; saveS(); });
   seg_($('durSet'), [[1.5,'Kort'],[2.5,'Normaal'],[4,'Lang']], S.dur, v => { S.dur = v; saveS(); });
@@ -906,6 +917,27 @@ function renderSettings(){
   $('swKeep').classList.toggle('on', S.keep);
   $('swChime').classList.toggle('on', S.chime);
 }
+function renderLevels(){
+  const box = $('lvList'); box.innerHTML = '';
+  const add = (num, title, desc, on, fn) => {
+    const b = document.createElement('button'); b.className = 'lv' + (on ? ' on' : '');
+    b.innerHTML = '<span class="n">' + num + '</span><span class="t"><b>' + title + '</b><small>' + desc + '</small></span>';
+    b.onclick = fn; box.append(b);
+  };
+  for (let i = 1; i <= MAXL; i++) add(i, LEVELS[i].name, LEVELS[i].desc, gameOn() && G.lvl === i, () => {
+    S.game = true; saveS(); G.lvl = i; G.pips = 0; G.bad = 0; G.maxLvl = Math.max(G.maxLvl, i); saveG(); closeLevels();
+  });
+  add('♪', 'Vrij oefenen', 'Losse tonen, zonder niveaus en sterren', !gameOn(), () => { S.game = false; saveS(); closeLevels(); });
+}
+function openLevels(){
+  if (!ac || mode !== 'toon') return;
+  stopTone(); runId++; if (st === 'listen' || st === 'sing') st = 'idle';
+  $('settings').hidden = true; renderLevels(); $('lvls').hidden = false; ui();
+}
+function closeLevels(){ $('lvls').hidden = true; hud(); if (ac) newRound(); }
+$('chip').onclick = openLevels;
+$('lvClose').onclick = closeLevels;
+$('lvOpen').onclick = openLevels;
 let settingsFrom = null;
 function openSettings(){ stopTone(); runId++; settingsFrom = st; if (st === 'listen' || st === 'sing') st = 'idle'; renderSettings(); $('settings').hidden = false; ui(); }
 $('closeSet').onclick = () => {
