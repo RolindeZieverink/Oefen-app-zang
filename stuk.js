@@ -238,7 +238,7 @@ let state = 'idle';     // idle | count | listen | sing | done
 let run = null;
 let pan = 0, sel = null, geom = null;   // terugkijken na afloop
 
-function loadO(){ let o; try { o = Object.assign({}, DEF, (JSON.parse(localStorage.getItem(LS) || '{}').o) || {}); } catch(e){ o = Object.assign({}, DEF); } return o; }
+function loadO(){ let o; try { o = Object.assign({}, DEF, (JSON.parse(localStorage.getItem(LS) || '{}').o) || {}); if (o.mixV !== 2){ o.volL = {}; o.volS = {}; o.mixV = 2; } } catch(e){ o = Object.assign({}, DEF); } return o; }
 function savePiece(){
   try {
     const pcs = piece ? { title: piece.title,
@@ -338,8 +338,8 @@ const reducedOf = p => { let r = redCache.get(p); if (!r || r.chord !== O.chord)
 // volume per stem: eigen stem apart ('own'), andere stemmen op volgnummer
 function volOf(kind, pi){
   const m = kind === 'sing' ? O.volS : O.volL;
-  if (pi === partIdx){ const v = m.own; return v != null ? v : (kind === 'sing' ? 0 : 1); }
-  const v = m[pi]; return v != null ? v : 0.4;
+  if (pi === partIdx){ const v = m.own; return v != null ? v : 0.8; }
+  const v = m[pi]; return v != null ? v : 0.2;
 }
 function applyMix(){
   if (!run || !run.partBus) return;
@@ -957,7 +957,7 @@ function renderMix(){
   mix.append(rows);
   const qb = document.createElement('div'); qb.className = 'qb';
   const setOthers = v => { piece.parts.forEach((_, pi) => { if (pi !== partIdx) map[pi] = v; }); renderMix(); if (run && run.kind === kind) applyMix(); savePiece(); };
-  [['Andere stemmen uit', 0], ['Andere stemmen zacht', 0.3], ['Andere stemmen gelijk', 0.7]].forEach(([l, v]) => { const b = document.createElement('button'); b.textContent = l; b.onclick = () => setOthers(v); qb.append(b); });
+  [['Andere stemmen uit', 0], ['Andere stemmen zacht', 0.2], ['Andere stemmen gelijk', 0.7]].forEach(([l, v]) => { const b = document.createElement('button'); b.textContent = l; b.onclick = () => setOthers(v); qb.append(b); });
   mix.append(qb);
   const note = document.createElement('div'); note.className = 'small';
   note.textContent = kind === 'sing' ? 'Zo hoor je de stemmen terwijl je meezingt. Gebruik oordopjes, anders hoort de microfoon de stemmen mee en klopt de beoordeling niet.' : 'Zo hoor je de stemmen bij “Luister”.';

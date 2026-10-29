@@ -1,4 +1,4 @@
-const V = 'naklank-v18';
+const V = 'naklank-v19';
 const FILES = ['./', 'index.html', 'stuk.js', 'koor.js', 'partituur.js', 'lib/osmd.min.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
