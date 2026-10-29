@@ -434,9 +434,9 @@ function stopAudio(rn){
    ========================================================= */
 // niveaus: hoe ruim de toonhoogte (cent) en het ritme (seconden) beoordeeld worden
 const LEVELS = {
-  easy:   { name: 'Easy',   tol: 50, on: 0.40, off: 0.60 },
-  medium: { name: 'Medium', tol: 40, on: 0.25, off: 0.40 },
-  hard:   { name: 'Hard',   tol: 30, on: 0.15, off: 0.25 }
+  easy:   { name: 'Easy',   tol: 50, on: 0.50, off: 0.50 },
+  medium: { name: 'Medium', tol: 40, on: 0.35, off: 0.35 },
+  hard:   { name: 'Hard',   tol: 30, on: 0.20, off: 0.20 }
 };
 const curLvl = () => LEVELS[O.level] || LEVELS.medium;
 const RHY = { early: 1, late: 1, short: 1, long: 1 };
@@ -841,7 +841,7 @@ function renderSetup(){
     $('mHint').textContent = 'Maat ' + first + ' tot en met ' + last + ' beschikbaar.';
   }
   seg($('spdSeg'), [[.5, '50%'], [.7, '70%'], [.85, '85%'], [1, '100%']], O.speed, v => { O.speed = v; });
-  { const lh = { easy: 'Ruim: toon mag ±50 cent afwijken en het ritme ongeveer 0,4 seconde.', medium: 'Gemiddeld: toon ±40 cent, ritme ongeveer 0,25 seconde.', hard: 'Streng: toon ±30 cent, ritme ongeveer 0,15 seconde.' };
+  { const lh = { easy: 'Ruim: toon mag ±50 cent afwijken en het ritme maximaal 0,5 seconde.', medium: 'Gemiddeld: toon ±40 cent, ritme maximaal 0,35 seconde.', hard: 'Streng: toon ±30 cent, ritme maximaal 0,2 seconde.' };
     seg($('lvlSeg'), [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard']], O.level, v => { O.level = v; $('lvlHint').textContent = lh[v]; });
     $('lvlHint').textContent = lh[O.level] || ''; }
   seg($('chordSeg'), [['top', 'Bovenste noot'], ['bottom', 'Onderste noot']], O.chord, v => { O.chord = v; prepare(); });
