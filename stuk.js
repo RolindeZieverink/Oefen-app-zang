@@ -866,32 +866,30 @@ $('fileAdd').onchange = async e => { const f = [...(e.target.files || [])]; awai
 const KK = 'naklank-koor';
 let koor = null;   // { id, key, idx }
 const koorMsg = t => { $('koorMsg').textContent = t || ''; };
+let koorPdfMenu = false;
 function renderKoor(){
   $('koorOut').hidden = !!koor; $('koorIn').hidden = !koor;
-  if (!koor) return;
-  $('koorNaam').textContent = koor.idx.koor || 'Mijn koor';
+  if (!koor){ koorPdfMenu = false; return; }
+  $('koorNaam').textContent = (koorPdfMenu ? 'PDF’s – ' : '') + (koor.idx.koor || 'Mijn koor');
   const l = $('koorList'); l.innerHTML = '';
+  const mk = (cls, txt, fn, css) => { const x = document.createElement('button'); x.type = 'button'; x.className = cls; if (css) x.style.cssText = css; x.innerHTML = txt; x.onclick = fn; l.append(x); return x; };
+  const metPdf = koor.idx.stukken.filter(s => s.pdf && s.pdf.length);
+  if (koorPdfMenu){
+    mk('btn', '‹ Terug naar de stukken', () => { koorPdfMenu = false; renderKoor(); }, 'flex:none;padding:10px 14px;justify-self:start');
+    if (!metPdf.length) l.insertAdjacentHTML('beforeend', '<div class="small">Er staan nog geen PDF’s klaar.</div>');
+    metPdf.forEach(st => {
+      l.insertAdjacentHTML('beforeend', '<div style="font-weight:650;margin-top:8px">' + esc(st.titel) + '</div>');
+      st.pdf.forEach(p => mk('kstuk', '<span>' + esc(p.naam) + '</span><span style="color:var(--orange);font-weight:700;font-size:18px">⬇</span>', () => koorPdf([{ pdf: [p] }])));
+    });
+    const n = metPdf.reduce((a, st) => a + st.pdf.length, 0);
+    if (n > 1) mk('go sec', '⬇ Alles in één keer (zip, ' + n + ' PDF’s)', () => koorPdf(metPdf), 'margin-top:8px');
+    return;
+  }
   if (!koor.idx.stukken.length) l.innerHTML = '<div class="small">Er staan nog geen stukken klaar.</div>';
   koor.idx.stukken.forEach(st => {
-    const b = document.createElement('button'); b.className = 'kstuk'; b.type = 'button';
-    b.innerHTML = '<span><b style="font-size:17px">' + esc(st.titel) + '</b></span><span style="color:var(--orange);font-weight:700;font-size:20px">›</span>';
-    b.onclick = () => koorLoad(st);
-    l.append(b);
-    if (st.pdf && st.pdf.length){
-      const p = document.createElement('button'); p.className = 'btn'; p.type = 'button';
-      p.style.cssText = 'flex:none;padding:7px 12px;margin:-4px 0 4px;font-size:14px;justify-self:start';
-      p.textContent = '⬇ PDF van dit stuk';
-      p.onclick = () => koorPdf([st]);
-      l.append(p);
-    }
+    const b = mk('kstuk', '<span><b style="font-size:17px">' + esc(st.titel) + '</b></span><span style="color:var(--orange);font-weight:700;font-size:20px">›</span>', () => koorLoad(st));
   });
-  const nP = koor.idx.stukken.reduce((a, s) => a + ((s.pdf && s.pdf.length) || 0), 0);
-  if (nP){
-    const a = document.createElement('button'); a.className = 'go sec'; a.type = 'button'; a.style.marginTop = '6px';
-    a.textContent = '⬇ Alle PDF’s downloaden (' + nP + ')';
-    a.onclick = () => koorPdf(koor.idx.stukken);
-    l.append(a);
-  }
+  mk('go sec', 'PDF’s', () => { koorPdfMenu = true; renderKoor(); }, 'margin-top:6px');
 }
 const crcT = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++){ let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
 const crc32 = u => { let c = 0xFFFFFFFF; for (let i = 0; i < u.length; i++) c = crcT[(c ^ u[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
@@ -973,7 +971,7 @@ async function koorLoad(st){
 }
 $('koorGo').onclick = () => koorUnlock($('koorCode').value, false);
 $('koorCode').onkeydown = e => { if (e.key === 'Enter') koorUnlock($('koorCode').value, false); };
-$('koorUit').onclick = () => { koor = null; try { localStorage.removeItem(KK); localStorage.removeItem(KK + '-idx'); } catch(_){} $('koorCode').value = ''; renderKoor(); };
+$('koorUit').onclick = () => { koor = null; koorPdfMenu = false; try { localStorage.removeItem(KK); localStorage.removeItem(KK + '-idx'); } catch(_){} $('koorCode').value = ''; renderKoor(); };
 // uitnodigingslink: ...#koor=CODE
 (() => {
   const m = /(?:^|[#&])koor=([^&]+)/.exec(location.hash || '');
