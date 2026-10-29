@@ -526,12 +526,12 @@ function stopSing(){
   run.dur = Math.max(0.5, el);
   scoreAll(run, true);
   run.frozen = Math.max(0.5, el) + 0.5; state = 'done'; pan = 0; sel = null;
-  saveAttempt(run); showResult(); refresh();
+  saveAttempt(run); rewardAttempt(run); showResult(); refresh();
 }
 function finish(){
   if (!run) return;
   if (run.kind === 'sing'){
-    recStop(); scoreAll(run, true); run.frozen = run.dur + 0.5; state = 'done'; saveAttempt(run); showResult();
+    recStop(); scoreAll(run, true); run.frozen = run.dur + 0.5; state = 'done'; saveAttempt(run); rewardAttempt(run); showResult();
   } else { stopAudio(run); run = null; state = 'idle'; }
   refresh();
 }
@@ -755,7 +755,7 @@ szoom.innerHTML = '<button id="zIn" aria-label="Inzoomen">+</button><button id="
 const shint = document.createElement('div'); shint.id = 'shint'; shint.className = 'stuk-only'; shint.textContent = '← Sleep om naar een andere maat te gaan →'; shint.hidden = true; stage.append(shint);
 const sno = document.createElement('div'); sno.id = 'snone'; sno.className = 'stuk-only'; sno.hidden = true; stage.append(sno);
 const sres = document.createElement('div'); sres.id = 'sres'; sres.className = 'stuk-only'; sres.hidden = true;
-sres.innerHTML = '<div class="top"><div class="badge" id="sbadge"></div><div style="min-width:0"><div id="stitle"></div><div id="sdetail"></div></div></div><div id="sissues"></div><div id="srec"></div><div class="btns" id="sbtns"></div>';
+sres.innerHTML = '<div class="top"><div class="badge" id="sbadge"></div><div style="min-width:0"><div id="stitle"></div><div id="sdetail"></div></div></div><div id="sissues"></div><div id="srewmsg"></div><div id="srec"></div><div class="btns" id="sbtns"></div>';
 app.insertBefore(sres, $('bar'));
 
 const sbar = document.createElement('div'); sbar.id = 'sbar'; sbar.className = 'stuk-only';
@@ -795,7 +795,7 @@ sheet.innerHTML = `<div class="wrap">
 <button class="btn" id="vbBack" style="flex:none;padding:10px 14px">← Ander stuk kiezen</button>
 <h1 style="font-size:28px;margin-top:14px" id="vbTitle"></h1>
 <div class="small" id="vbInfo"></div>
-<div id="partWrap"><h2>Stem</h2><div class="seg" id="partSeg"></div><button class="go sec" id="histBtn" style="margin-top:12px">Mijn resultaten bij deze stem</button><button class="go sec" id="recBtn" style="margin-top:10px">Mijn opnames</button></div>
+<div id="partWrap"><h2>Stem</h2><div class="seg" id="partSeg"></div><button class="go sec" id="histBtn" style="margin-top:12px">Mijn resultaten bij deze stem</button><button class="go sec" id="recBtn" style="margin-top:10px">Mijn opnames</button><button class="go sec" id="rewBtn" style="margin-top:10px">Mijn medailles</button></div>
 <h2>Maten</h2>
 <div class="stp"><input id="mFrom" type="number" inputmode="numeric" min="1"><span>tot en met</span><input id="mTo" type="number" inputmode="numeric" min="1"><button class="btn" id="mAll" style="flex:none;padding:11px 14px">Alles</button></div>
 <div class="small" id="mHint"></div>
@@ -1149,7 +1149,7 @@ function showResult(){
     $('stitle').textContent = 'Te kort om te beoordelen'; $('sdetail').textContent = 'Zing iets langer mee, dan krijg je een analyse van je noten.';
     $('sissues').innerHTML = ''; const bt0 = $('sbtns'); bt0.innerHTML = '';
     const b0 = document.createElement('button'); b0.className = 'btn main'; b0.textContent = 'Nog eens'; b0.onclick = () => start('sing'); bt0.append(b0);
-    renderRec(); sres.hidden = false; return;
+    renderReward(); renderRec(); sres.hidden = false; return;
   }
   const ok = ns.filter(n => n.status.k === 'ok').length, pct = tot ? Math.round(100 * ok / tot) : 0;
   const badge = $('sbadge'), t = $('stitle'), d = $('sdetail'), iss = $('sissues'), bt = $('sbtns');
@@ -1193,7 +1193,7 @@ function showResult(){
     b2.onclick = () => { from = piece.measures[0].label; to = piece.measures[piece.measures.length - 1].label; prepare(); previewKey = ''; savePiece(); start('sing'); };
     bt.append(b2);
   }
-  renderRec(); sres.hidden = false;
+  renderReward(); renderRec(); sres.hidden = false;
 }
 
 
@@ -1306,6 +1306,142 @@ async function openOpn(){
   });
 }
 $('recBtn').onclick = openOpn;
+
+
+/* =========================================================
+   Beloningen: geluid + confetti bij ≥65%, weekteller, dagenreeks, medailles
+   ========================================================= */
+const RK = 'naklank-rew';
+const rewLoad = () => { try { const o = JSON.parse(localStorage.getItem(RK) || '{}'); return { a: o.a || [], best: o.best || {}, b: o.b || {}, g: o.g || 0, n: o.n || 0 }; } catch(e){ return { a: [], best: {}, b: {}, g: 0, n: 0 }; } };
+const rewSave = r => { try { r.a = r.a.slice(-600); localStorage.setItem(RK, JSON.stringify(r)); } catch(e){} };
+const dkey = d => d.getFullYear() * 400 + d.getMonth() * 32 + d.getDate();
+function weekStart(){ const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.getTime(); }
+function rewStats(r){
+  const wk = r.a.filter(t => t >= weekStart()).length;
+  const days = new Set(r.a.map(t => dkey(new Date(t))));
+  let streak = 0; const d = new Date();
+  if (!days.has(dkey(d))) d.setDate(d.getDate() - 1);
+  while (days.has(dkey(d))){ streak++; d.setDate(d.getDate() - 1); }
+  let maxWeek = 0; const byW = {};
+  r.a.forEach(t => { const x = new Date(t); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); byW[x.getTime()] = (byW[x.getTime()] || 0) + 1; });
+  for (const k in byW) maxWeek = Math.max(maxWeek, byW[k]);
+  return { wk, streak, total: r.n, good: r.g, maxWeek, stuk: Object.keys(r.best).filter(k => r.best[k] >= 65).length };
+}
+const BADGES = [
+  { id: 'n1',   ic: '🎤', t: 'Eerste keer',        d: 'Je eerste oefenronde afgerond',        ok: s => s.total >= 1 },
+  { id: 'n10',  ic: '🔟', t: 'Tien keer',          d: '10 keer geoefend',                      ok: s => s.total >= 10, p: s => s.total + '/10' },
+  { id: 'n25',  ic: '🎶', t: 'Vaste zanger',       d: '25 keer geoefend',                      ok: s => s.total >= 25, p: s => s.total + '/25' },
+  { id: 'n50',  ic: '🌟', t: 'Oefenkampioen',      d: '50 keer geoefend',                      ok: s => s.total >= 50, p: s => s.total + '/50' },
+  { id: 'n100', ic: '👑', t: 'Koorkoning',         d: '100 keer geoefend',                     ok: s => s.total >= 100, p: s => s.total + '/100' },
+  { id: 'w5',   ic: '📅', t: 'Weekje goed bezig',  d: '5 keer in één week geoefend',           ok: s => s.maxWeek >= 5, p: s => s.maxWeek + '/5' },
+  { id: 'w10',  ic: '🚀', t: 'Topweek',            d: '10 keer in één week geoefend',          ok: s => s.maxWeek >= 10, p: s => s.maxWeek + '/10' },
+  { id: 's3',   ic: '🔥', t: 'Drie dagen op rij',  d: '3 dagen achter elkaar geoefend',        ok: s => s.streak >= 3, p: s => s.streak + '/3' },
+  { id: 's7',   ic: '☀️', t: 'Een hele week',      d: '7 dagen achter elkaar geoefend',        ok: s => s.streak >= 7, p: s => s.streak + '/7' },
+  { id: 's14',  ic: '💎', t: 'Twee weken op rij',  d: '14 dagen achter elkaar geoefend',       ok: s => s.streak >= 14, p: s => s.streak + '/14' },
+  { id: 'g1',   ic: '👍', t: 'Mooi gezongen',      d: 'Voor het eerst 65% of meer goed',       ok: s => s.good >= 1 },
+  { id: 'g10',  ic: '🎵', t: 'Tien keer mooi',     d: '10 keer 65% of meer goed',              ok: s => s.good >= 10, p: s => s.good + '/10' },
+  { id: 'top85',ic: '🥇', t: 'Sterk resultaat',    d: 'Voor het eerst 85% of meer goed',       ok: (s, x) => x.top >= 85 },
+  { id: 'top100',ic: '🏆', t: 'Foutloos',          d: '100% goed (minstens 8 noten)',          ok: (s, x) => x.top >= 100 && x.tot >= 8 },
+  { id: 'st3',  ic: '📚', t: 'Drie stukken',       d: '3 stukken of stemmen met 65%+ gezongen',ok: s => s.stuk >= 3, p: s => s.stuk + '/3' },
+  { id: 'st10', ic: '🎼', t: 'Repertoire-held',    d: '10 stukken of stemmen met 65%+',        ok: s => s.stuk >= 10, p: s => s.stuk + '/10' }
+];
+function rewardAttempt(rn){
+  rn.reward = null;
+  try {
+    const ns = rn.notes, tot = ns.length, heard = ns.filter(n => n.status && n.status.k !== 'none').length;
+    if (!piece || !tot || heard < Math.min(4, tot)) return;
+    const ok = ns.filter(n => n.status.k === 'ok').length, pct = Math.round(100 * ok / tot);
+    const r = rewLoad(); r.a.push(Date.now()); r.n++; if (pct >= 65) r.g++;
+    const key = piece.title + '|' + (partNames()[partIdx] || ''), prevBest = r.best[key];
+    let rec = false;
+    if (tot >= 6 && (prevBest == null || pct > prevBest)){ rec = prevBest != null && pct >= 65; r.best[key] = pct; }
+    const st = rewStats(r), fresh = [];
+    BADGES.forEach(b => { if (!r.b[b.id] && b.ok(st, { top: pct, tot })){ r.b[b.id] = Date.now(); fresh.push(b); } });
+    rewSave(r);
+    const msg = [];
+    if (st.wk === 1) msg.push('🎉 Eerste oefenronde van deze week!');
+    else if ([5, 10, 15, 20, 25, 30, 40, 50].includes(st.wk)) msg.push('🎉 Oh kijk! Wat goed, deze week al ' + st.wk + '× geoefend!');
+    else msg.push('Deze week al ' + st.wk + '× geoefend.');
+    if (st.streak >= 2) msg.push('🔥 ' + st.streak + ' dagen achter elkaar geoefend!');
+    if (rec) msg.push('⭐ Nieuw persoonlijk record bij deze stem: ' + pct + '%');
+    rn.reward = { pct, msg, fresh, level: pct >= 85 ? 2 : (pct >= 65 ? 1 : 0) };
+    if (rn.reward.level || fresh.length){ rewardFx(rn.reward.level, fresh.length > 0); }
+  } catch(e){ rn.reward = null; }
+}
+function rewardSound(level, badge){
+  const ac = C.ac; if (!ac || !C.S.chime) return;
+  const t = ac.currentTime + 0.05;
+  const seq = badge ? [[523, 0], [659, .1], [784, .2], [1047, .3], [784, .5], [1047, .6], [1319, .72]]
+    : level >= 2 ? [[523, 0], [659, .09], [784, .18], [1047, .27], [1319, .36], [1568, .45]]
+    : [[659, 0], [784, .1], [1047, .2]];
+  seq.forEach(([f, d]) => {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'triangle'; o.frequency.value = f;
+    g.gain.setValueAtTime(0, t + d); g.gain.linearRampToValueAtTime(.2, t + d + .012); g.gain.exponentialRampToValueAtTime(.001, t + d + (badge ? .7 : .5));
+    o.connect(g); g.connect(ac.destination); o.start(t + d); o.stop(t + d + .75);
+  });
+  if (level >= 2 || badge){ // glinstering
+    [2093, 2637, 3136, 2637].forEach((f, i) => {
+      const o = ac.createOscillator(), g = ac.createGain(), d = .5 + i * .08;
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0, t + d); g.gain.linearRampToValueAtTime(.07, t + d + .01); g.gain.exponentialRampToValueAtTime(.001, t + d + .3);
+      o.connect(g); g.connect(ac.destination); o.start(t + d); o.stop(t + d + .35);
+    });
+  }
+}
+function confetti(n){
+  const cv = document.createElement('canvas'); cv.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:9999';
+  const dpr = Math.min(2, window.devicePixelRatio || 1), W = innerWidth, H = innerHeight;
+  cv.width = W * dpr; cv.height = H * dpr; document.body.append(cv);
+  const x = cv.getContext('2d'); x.scale(dpr, dpr);
+  const cols = ['#ff8a00', '#3ccf7a', '#ffd23f', '#5ec2ff', '#ff6b9a', '#b58cff'];
+  const ps = Array.from({ length: n }, () => ({ x: W * (0.2 + Math.random() * 0.6), y: H * 0.55, vx: (Math.random() - .5) * 11, vy: -8 - Math.random() * 10, r: 3 + Math.random() * 4, c: cols[(Math.random() * cols.length) | 0], a: Math.random() * 6, va: (Math.random() - .5) * .4 }));
+  const t0 = performance.now();
+  (function step(now){
+    const el = now - t0; x.clearRect(0, 0, W, H);
+    ps.forEach(p => { p.vy += .35; p.x += p.vx; p.y += p.vy; p.vx *= .99; p.a += p.va; x.save(); x.translate(p.x, p.y); x.rotate(p.a); x.globalAlpha = Math.max(0, 1 - el / 2200); x.fillStyle = p.c; x.fillRect(-p.r, -p.r / 2, p.r * 2, p.r); x.restore(); });
+    if (el < 2300) requestAnimationFrame(step); else cv.remove();
+  })(t0);
+}
+function rewardFx(level, badge){ rewardSound(level, badge); try { confetti(badge ? 150 : level >= 2 ? 110 : 60); } catch(_){} }
+function renderReward(){
+  const el = document.getElementById('srewmsg'); if (!el) return;
+  el.innerHTML = '';
+  const rw = run && run.reward; if (!rw) return;
+  const box = document.createElement('div'); box.className = 'rewbox';
+  box.style.cssText = 'margin:10px 0 2px;padding:10px 12px;border-radius:12px;background:rgba(255,138,0,.12);border:1px solid rgba(255,138,0,.35);font-size:15px;line-height:1.4';
+  rw.msg.forEach(m => { const d = document.createElement('div'); d.textContent = m; box.append(d); });
+  rw.fresh.forEach(b => { const d = document.createElement('div'); d.style.cssText = 'margin-top:6px;font-weight:700'; d.textContent = b.ic + ' Nieuwe medaille: ' + b.t + '!'; box.append(d); });
+  el.append(box);
+}
+const rewSheet = document.createElement('div'); rewSheet.className = 'sheet stuk-only'; rewSheet.id = 'srew'; rewSheet.hidden = true; document.body.append(rewSheet);
+function openRew(){
+  const r = rewLoad(), st = rewStats(r);
+  rewSheet.hidden = false; rewSheet.scrollTop = 0;
+  const earned = BADGES.filter(b => r.b[b.id]).length;
+  const tile = (big, small) => '<div style="flex:1;min-width:90px;padding:12px;border-radius:14px;background:#2b2f37;text-align:center"><div style="font-size:28px;font-weight:800">' + big + '</div><div class="small" style="margin:2px 0 0">' + small + '</div></div>';
+  let h = '<div class="wrap"><h1 style="font-size:30px">Mijn medailles</h1>';
+  h += '<div style="display:flex;gap:10px;margin:14px 0;flex-wrap:wrap">' + tile(st.wk + '×', 'deze week geoefend') + tile(st.streak + (st.streak === 1 ? ' dag' : ' dagen'), 'op rij') + tile(st.total + '×', 'totaal') + '</div>';
+  h += '<h2>Medailles (' + earned + '/' + BADGES.length + ')</h2><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+  BADGES.forEach(b => {
+    const got = r.b[b.id];
+    h += '<div style="padding:12px;border-radius:14px;background:' + (got ? 'rgba(255,138,0,.16);border:1px solid rgba(255,138,0,.45)' : '#23262d;border:1px solid transparent') + ';' + (got ? '' : 'opacity:.62') + '">'
+      + '<div style="font-size:30px;' + (got ? '' : 'filter:grayscale(1)') + '">' + b.ic + '</div><div style="font-weight:700;margin-top:4px">' + b.t + '</div><div class="small" style="margin:2px 0 0">' + b.d + (!got && b.p ? ' · ' + b.p(st) : '') + '</div></div>';
+  });
+  h += '</div>';
+  const keys = Object.keys(r.best).sort((a, b) => r.best[b] - r.best[a]);
+  h += '<h2 style="margin-top:20px">Mijn stukken</h2>';
+  if (!keys.length) h += '<div class="small">Zing een stuk mee (minstens 6 noten) en het verschijnt hier met je beste score.</div>';
+  keys.forEach(k => {
+    const [t, v] = k.split('|'), p = r.best[k], stars = p >= 95 ? '★★★' : p >= 85 ? '★★☆' : p >= 65 ? '★☆☆' : '☆☆☆';
+    h += '<div class="hrow"><div class="t"><b>' + esc(t) + '</b><small>' + esc(v) + ' · beste: ' + p + '% goed</small></div><div style="font-size:20px;color:#ffb84d;letter-spacing:2px">' + stars + '</div></div>';
+  });
+  h += '<div class="small" style="margin-top:14px">Je medailles staan alleen op deze telefoon. Vanaf 65% goed krijg je een geluidje en confetti, vanaf 85% een groter feest.</div>';
+  h += '<button class="go" id="rewTerug" style="margin-top:16px">Terug</button></div>';
+  rewSheet.innerHTML = h;
+  $('rewTerug').onclick = () => { rewSheet.hidden = true; };
+}
+$('rewBtn').onclick = openRew;
 
 let drag = null;
 cvEl.addEventListener('pointerdown', e => {
@@ -1543,7 +1679,7 @@ function scoreFrame(mnow){
 window.NKstuk = {
   frame,
   enter(){ medBuf = []; if (!piece && restore()) prepare(); if (piece && !piece.xml && window.NKscore) NKscore.loadXml(piece.title).then(x => { if (x && piece && !piece.xml) piece.xml = x; }); koorAuto().then(() => { if (!sheet.hidden) renderSetup(); }); openSetup('A'); },
-  leave(){ stopAll(); sheet.hidden = true; hist.hidden = true; opnSheet.hidden = true; if (window.NKscore) NKscore.hide(); },
-  _t: { parseXML, parseMidi, parseFile, reduce, evalNote, get O(){ return O; }, LAT, demoPiece, finishPiece, get state(){ return state; }, get run(){ return run; }, get notes(){ return notes; }, setPiece, get piece(){ return piece; } }
+  leave(){ stopAll(); sheet.hidden = true; hist.hidden = true; opnSheet.hidden = true; rewSheet.hidden = true; if (window.NKscore) NKscore.hide(); },
+  _t: { parseXML, parseMidi, parseFile, reduce, evalNote, rewardAttempt, openRew, get O(){ return O; }, LAT, demoPiece, finishPiece, get state(){ return state; }, get run(){ return run; }, get notes(){ return notes; }, setPiece, get piece(){ return piece; } }
 };
 })();
