@@ -1,4 +1,4 @@
-# Naklank
+# Oefenapp Koren Rolinde Zieverink
 
 Luister naar een toon, zing hem na en zie meteen of je zuiver zit.
 
