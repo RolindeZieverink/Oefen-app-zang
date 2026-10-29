@@ -341,15 +341,16 @@ function playNote(bus, t, d, m, vol, own, piano){
   const ac = C.ac, f = mtof(m), g = ac.createGain();
   if (own){   // eigen stem: helderder, 'rietachtig' geluid zodat je hem makkelijk herkent
     const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2300; lp.Q.value = 0.7;
-    g.connect(lp); lp.connect(bus); vol *= 0.62;
+    g.connect(lp); lp.connect(bus); vol *= 0.85;
   } else g.connect(bus);
   const end = t + Math.max(0.06, d - 0.03);
   g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.03);
   g.gain.setValueAtTime(vol, Math.max(t + 0.03, end - 0.06)); g.gain.linearRampToValueAtTime(0, end);
-  if (own){
-    const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.start(t); o.stop(end + 0.03);
-    const o2 = ac.createOscillator(); o2.type = 'sawtooth'; o2.frequency.value = f; o2.detune.value = 7; o2.start(t); o2.stop(end + 0.03);
-    const gg = ac.createGain(); gg.gain.value = 0.5; o.connect(gg); o2.connect(gg); gg.connect(g);
+  if (own){   // eigen stem: zuiver, stabiel geluid (geen zoemende boventonen), iets helderder dan de andere stemmen
+    [[1,1],[2,.12],[3,.3],[5,.08]].forEach(([k, a]) => {
+      const o = ac.createOscillator(); o.type = 'sine'; o.frequency.value = f * k;
+      const gg = ac.createGain(); gg.gain.value = a / 1.5; o.connect(gg); gg.connect(g); o.start(t); o.stop(end + 0.03);
+    });
     return;
   }
   [[1,1],[2,.35],[3,.12]].forEach(([k, a]) => {
