@@ -355,6 +355,20 @@ function applyMix(){
   if (!run || !run.partBus) return;
   run.partBus.forEach((g, pi) => { try { g.gain.setTargetAtTime(volOf(run.kind, pi), C.ac.currentTime, 0.02); } catch(e){} });
 }
+// metronoomtikken volgen de maatsoort van elke maat (ook bij wisselende maatsoorten)
+function buildClicks(rn){
+  const out = [];
+  for (let mi = rn.i0; mi <= rn.i1; mi++){
+    const m = piece.measures[mi], sig = sigAt(mi), compound = sig[2] === 8 && sig[1] % 3 === 0;
+    const pq = compound ? 1.5 : 4 / sig[2], n = compound ? sig[1] / 3 : sig[1];
+    for (let k = 0; k < n; k++){
+      const b = m.b + k * pq;
+      if (b >= m.b + m.len - 1e-6 || b >= rn.bE - 1e-6) break;
+      out.push({ s: rn.sec(b), accent: k === 0 });
+    }
+  }
+  return out;
+}
 function startAudio(rn){
   const ac = C.ac, bus = ac.createGain(); bus.connect(ac.destination); rn.bus = bus;
   rn.partBus = piece.parts.map((p, pi) => { const g = ac.createGain(); g.gain.value = volOf(rn.kind, pi); g.connect(bus); return g; });
@@ -370,21 +384,20 @@ function startAudio(rn){
     }
   });
   ev.sort((a, b) => a.t - b.t);
-  let i = 0, kc = 0;
+  let i = 0, ci = 0; rn.clicks = buildClicks(rn);
   const tick = () => {
     const lim = ac.currentTime + 0.7;
     // metronoom: live aan/uit te zetten tijdens het afspelen
-    while (rn.t0 + kc * rn.pulse < Math.min(lim, rn.t0 + rn.dur - 1e-6)){
-      const tt = rn.t0 + kc * rn.pulse;
-      if (O.click && tt >= ac.currentTime - 0.05) click(bus, tt, kc % rn.nPulse === 0);
-      kc++;
+    while (ci < rn.clicks.length && rn.t0 + rn.clicks[ci].s < lim){
+      const c = rn.clicks[ci++], tt = rn.t0 + c.s;
+      if (O.click && tt >= ac.currentTime - 0.05) click(bus, tt, c.accent);
     }
     while (i < ev.length && ev[i].t < lim){
       const e = ev[i++];
       if (e.t < ac.currentTime - 0.05) continue;
       if (e.click) click(bus, e.t, e.accent); else playNote(rn.partBus[e.pi], e.t, e.d, e.m, e.vol, e.pi === partIdx);
     }
-    if (i >= ev.length && rn.t0 + kc * rn.pulse >= rn.t0 + rn.dur - 1e-6) { clearInterval(rn.timer); rn.timer = null; }
+    if (i >= ev.length && ci >= rn.clicks.length) { clearInterval(rn.timer); rn.timer = null; }
   };
   tick(); rn.timer = setInterval(tick, 40);
 }
