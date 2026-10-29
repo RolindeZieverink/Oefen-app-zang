@@ -238,7 +238,7 @@ let state = 'idle';     // idle | count | listen | sing | done
 let run = null;
 let pan = 0, sel = null, geom = null;   // terugkijken na afloop
 
-function loadO(){ let o; try { o = Object.assign({}, DEF, (JSON.parse(localStorage.getItem(LS) || '{}').o) || {}); if (o.mixV !== 2){ o.volL = {}; o.volS = {}; o.mixV = 2; } } catch(e){ o = Object.assign({}, DEF); } return o; }
+function loadO(){ let o; try { o = Object.assign({}, DEF, (JSON.parse(localStorage.getItem(LS) || '{}').o) || {}); if (o.mixV !== 3){ o.volL = {}; o.volS = {}; o.mixV = 3; } } catch(e){ o = Object.assign({}, DEF); } return o; }
 function savePiece(){
   try {
     const pcs = piece ? { title: piece.title,
@@ -318,11 +318,21 @@ function buildRun(kind, f0, t0){
 /* =========================================================
    Geluid
    ========================================================= */
-function playNote(bus, t, d, m, vol){
-  const ac = C.ac, f = mtof(m), g = ac.createGain(); g.connect(bus);
+function playNote(bus, t, d, m, vol, own){
+  const ac = C.ac, f = mtof(m), g = ac.createGain();
+  if (own){   // eigen stem: helderder, 'rietachtig' geluid zodat je hem makkelijk herkent
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2300; lp.Q.value = 0.7;
+    g.connect(lp); lp.connect(bus); vol *= 0.62;
+  } else g.connect(bus);
   const end = t + Math.max(0.06, d - 0.03);
   g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.03);
   g.gain.setValueAtTime(vol, Math.max(t + 0.03, end - 0.06)); g.gain.linearRampToValueAtTime(0, end);
+  if (own){
+    const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.start(t); o.stop(end + 0.03);
+    const o2 = ac.createOscillator(); o2.type = 'sawtooth'; o2.frequency.value = f; o2.detune.value = 7; o2.start(t); o2.stop(end + 0.03);
+    const gg = ac.createGain(); gg.gain.value = 0.5; o.connect(gg); o2.connect(gg); gg.connect(g);
+    return;
+  }
   [[1,1],[2,.35],[3,.12]].forEach(([k, a]) => {
     const o = ac.createOscillator(); o.type = 'sine'; o.frequency.value = f * k;
     const gg = ac.createGain(); gg.gain.value = a / 1.47; o.connect(gg); gg.connect(g); o.start(t); o.stop(end + 0.03);
@@ -338,8 +348,8 @@ const reducedOf = p => { let r = redCache.get(p); if (!r || r.chord !== O.chord)
 // volume per stem: eigen stem apart ('own'), andere stemmen op volgnummer
 function volOf(kind, pi){
   const m = kind === 'sing' ? O.volS : O.volL;
-  if (pi === partIdx){ const v = m.own; return v != null ? v : 0.8; }
-  const v = m[pi]; return v != null ? v : 0.2;
+  if (pi === partIdx){ const v = m.own; return v != null ? v : 1; }
+  const v = m[pi]; return v != null ? v : 0.1;
 }
 function applyMix(){
   if (!run || !run.partBus) return;
@@ -372,7 +382,7 @@ function startAudio(rn){
     while (i < ev.length && ev[i].t < lim){
       const e = ev[i++];
       if (e.t < ac.currentTime - 0.05) continue;
-      if (e.click) click(bus, e.t, e.accent); else playNote(rn.partBus[e.pi], e.t, e.d, e.m, e.vol);
+      if (e.click) click(bus, e.t, e.accent); else playNote(rn.partBus[e.pi], e.t, e.d, e.m, e.vol, e.pi === partIdx);
     }
     if (i >= ev.length && rn.t0 + kc * rn.pulse >= rn.t0 + rn.dur - 1e-6) { clearInterval(rn.timer); rn.timer = null; }
   };
@@ -957,7 +967,7 @@ function renderMix(){
   mix.append(rows);
   const qb = document.createElement('div'); qb.className = 'qb';
   const setOthers = v => { piece.parts.forEach((_, pi) => { if (pi !== partIdx) map[pi] = v; }); renderMix(); if (run && run.kind === kind) applyMix(); savePiece(); };
-  [['Andere stemmen uit', 0], ['Andere stemmen zacht', 0.2], ['Andere stemmen gelijk', 0.7]].forEach(([l, v]) => { const b = document.createElement('button'); b.textContent = l; b.onclick = () => setOthers(v); qb.append(b); });
+  [['Andere stemmen uit', 0], ['Andere stemmen zacht', 0.1], ['Andere stemmen gelijk', 0.7]].forEach(([l, v]) => { const b = document.createElement('button'); b.textContent = l; b.onclick = () => setOthers(v); qb.append(b); });
   mix.append(qb);
   const note = document.createElement('div'); note.className = 'small';
   note.textContent = kind === 'sing' ? 'Zo hoor je de stemmen terwijl je meezingt. Gebruik oordopjes, anders hoort de microfoon de stemmen mee en klopt de beoordeling niet.' : 'Zo hoor je de stemmen bij “Luister”.';
