@@ -27,7 +27,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
 
 /* meter bovenaan, zoals in het voorbeeld */
-#meter{position:absolute;top:10px;left:calc(var(--kw) + 12px);width:min(52%,210px);padding:8px 12px 10px;border-radius:12px;
+#meter{position:absolute;top:50px;left:calc(var(--kw) + 12px);width:min(52%,210px);padding:8px 12px 10px;border-radius:12px;
   background:rgba(23,25,28,.82);border:1px solid var(--line);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 #meter .mrow{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;color:var(--mute);font-variant-numeric:tabular-nums}
 #meter b{font-size:20px;color:var(--ink);font-weight:600;min-width:3.4ch;text-align:center}
@@ -37,12 +37,12 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-acti
 #meter.on #thumb{opacity:1}
 #meter.inTune #thumb{background:var(--ok)}
 
-#chip{position:absolute;top:12px;right:12px;padding:6px 11px;border-radius:999px;font-size:13px;color:var(--mute);
+#chip{position:absolute;top:8px;left:calc(var(--kw) + 12px);right:12px;padding:6px 11px;border-radius:999px;font-size:13px;color:var(--mute);
   background:rgba(23,25,28,.82);border:1px solid var(--line);font-variant-numeric:tabular-nums;display:flex;gap:6px;align-items:center}
 #chip svg{width:13px;height:13px;stroke:var(--ok)}
 
 /* statuskaart */
-#card{position:absolute;left:calc(var(--kw) + 12px);right:12px;top:86px;display:flex;gap:12px;align-items:center;padding:12px 14px;border-radius:14px;
+#card{position:absolute;left:calc(var(--kw) + 12px);right:12px;top:122px;display:flex;gap:12px;align-items:center;padding:12px 14px;border-radius:14px;
   background:var(--panel);border:1px solid var(--line);box-shadow:0 8px 28px rgba(0,0,0,.35)}
 #card[hidden]{display:none}
 #cardTitle{font-weight:650;font-size:17px}
@@ -117,6 +117,21 @@ h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
 #tabs{display:flex;gap:8px;padding:6px 12px;background:#1d2024;border-bottom:1px solid #000;flex:none}
 #tabs button{flex:1;padding:9px 8px;border-radius:10px;background:#2b2f37;color:#c5c9d6;font-weight:650;font-size:14px}
 #tabs button.on{background:var(--orange);color:#1c1105}
+#chip b{color:var(--ink);font-size:13px;white-space:nowrap}
+#chip .pips{display:flex;gap:3px}
+#chip .pips i{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.18)}
+#chip .pips i.on{background:var(--orange)}
+#chip .st{color:#ffd166;white-space:nowrap}
+#chip .fire{white-space:nowrap}
+#resStars{font-size:22px;letter-spacing:2px;color:#ffd166;margin-top:1px;line-height:1.2}
+#resStars:empty{display:none}
+#resNotes{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+#resNotes:empty{display:none}
+.nc{padding:5px 9px;border-radius:9px;font-size:13px;font-weight:650;background:#2b2f37;color:#c5c9d6}
+.nc.ok{background:rgba(60,207,122,.18);color:#7de3a6}
+.nc.bad{background:rgba(255,107,94,.18);color:#ffb4ac}
+#lvlUp{margin-top:8px;padding:8px 12px;border-radius:10px;background:rgba(232,137,12,.16);color:#ffcf8a;font-size:14px;font-weight:650}
+#lvlUp:empty{display:none}
 </style>
 </head>
 <body>
@@ -125,11 +140,13 @@ h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
   <div id="stage">
     <canvas id="cv"></canvas>
     <div id="meter"><div class="mrow"><span>−50C</span><b id="mnote">–</b><span>+50C</span></div><div class="track"><span class="mid"></span><i id="thumb"></i></div></div>
-    <div id="chip" title="In één keer goed"><svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg><span id="score">0/0</span></div>
+    <div id="chip" title="Voortgang"></div>
     <div id="card" hidden><div id="cardIcon"></div><div style="flex:1;min-width:0"><div id="cardTitle"></div><div id="cardSub"></div><div id="hold" hidden><i></i></div></div></div>
   </div>
   <div id="res" hidden>
-    <div class="top"><div class="badge" id="badge"></div><div style="min-width:0"><div id="resTitle"></div><div id="resDetail"></div></div></div>
+    <div class="top"><div class="badge" id="badge"></div><div style="min-width:0"><div id="resTitle"></div><div id="resStars"></div><div id="resDetail"></div></div></div>
+    <div id="resNotes"></div>
+    <div id="lvlUp"></div>
     <div id="resHint"></div>
     <div class="btns" id="resBtns"></div>
   </div>
@@ -164,6 +181,8 @@ h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
 <div class="sheet" id="settings" hidden>
   <div class="wrap">
     <h1 style="font-size:32px">Instellingen</h1>
+    <h2>Soort oefening</h2><div class="seg" id="gameSet"></div>
+    <div id="lvlBox"><h2>Niveau</h2><div class="seg" id="lvlSet"></div><p class="note" id="lvlName"></p></div>
     <h2>Stemgroep</h2><div class="seg" id="voiceSet"></div>
     <h2>Hoe streng?</h2><div class="seg" id="tolSet"></div>
     <h2>Lengte van de toon</h2><div class="seg" id="durSet"></div>
@@ -171,7 +190,7 @@ h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
     <div class="row"><div>Octaaf mag afwijken<small>Zing je dezelfde toon een octaaf hoger of lager, dan telt dat als goed.</small></div><button class="sw" id="swOct" aria-label="Octaaf mag afwijken"></button></div>
     <div class="row"><div>Doeltoon tonen bij opnieuw proberen<small>Na een fout blijft de juiste toon op het toetsenbord zichtbaar.</small></div><button class="sw" id="swKeep" aria-label="Doeltoon tonen"></button></div>
     <div class="row"><div>Geluidje bij goed antwoord</div><button class="sw" id="swChime" aria-label="Geluidje"></button></div>
-    <button class="go sec" id="resetScore">Score op nul zetten</button>
+    <button class="go sec" id="resetScore">Voortgang op nul zetten</button>
     <button class="go" id="closeSet">Klaar</button>
   </div>
 </div>
@@ -187,13 +206,38 @@ const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
 const ftom = f => 69 + 12 * Math.log2(f / 440);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const VOICES = { sopraan:{lo:60,hi:79,label:'Sopraan'}, alt:{lo:55,hi:74,label:'Alt'}, tenor:{lo:48,hi:67,label:'Tenor'}, bas:{lo:40,hi:60,label:'Bas'} };
-const DEF = { voice:'sopraan', tol:35, octave:true, keep:true, dur:2.5, chime:true };
+const DEF = { voice:'sopraan', tol:35, octave:true, keep:true, dur:2.5, chime:true, game:true };
 
 let S = loadS();
 function loadS(){ try { return Object.assign({}, DEF, JSON.parse(localStorage.getItem('naklank') || '{}')); } catch(e){ return Object.assign({}, DEF); } }
 function saveS(){ try { localStorage.setItem('naklank', JSON.stringify(S)); } catch(e){} }
 const stats = (() => { try { return Object.assign({rounds:0, first:0}, JSON.parse(localStorage.getItem('naklank-stats') || '{}')); } catch(e){ return {rounds:0, first:0}; } })();
 function saveStats(){ try { localStorage.setItem('naklank-stats', JSON.stringify(stats)); } catch(e){} }
+
+/* ---------- spel: niveaus, sterren, reeksen ---------- */
+const LEVELS = [null,
+  { n:1, step:0, rh:0, tol:40, name:'Eén toon' },
+  { n:2, step:2, rh:0, tol:40, name:'Twee tonen, dicht bij elkaar' },
+  { n:2, step:5, rh:0, tol:38, name:'Twee tonen, grotere stap' },
+  { n:3, step:4, rh:0, tol:35, name:'Drie tonen achter elkaar' },
+  { n:3, step:7, rh:0, tol:35, name:'Drie tonen, grotere sprongen' },
+  { n:4, step:5, rh:1, tol:35, name:'Vier tonen met ritme' },
+  { n:4, step:7, rh:2, tol:30, name:'Ritme met pauzes' },
+  { n:5, step:7, rh:2, tol:25, name:'Meesterklas (5 of 6 tonen)' }
+];
+const MAXL = 8, PIPS = 5;
+const DEFG = { lvl:1, maxLvl:1, pips:0, streak:0, best:0, stars:0, bad:0, days:0, last:'' };
+let G = (() => { try { return Object.assign({}, DEFG, JSON.parse(localStorage.getItem('naklank-game') || '{}')); } catch(e){ return Object.assign({}, DEFG); } })();
+function saveG(){ try { localStorage.setItem('naklank-game', JSON.stringify(G)); } catch(e){} }
+const gameOn = () => !!S.game;
+const curLevel = () => gameOn() ? LEVELS[Math.max(1, Math.min(MAXL, G.lvl))] : LEVELS[1];
+const curTol = () => gameOn() ? Math.round(curLevel().tol * S.tol / 35) : S.tol;
+function dayKey(d){ d = d || new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+function touchDay(){
+  const t = dayKey(); if (G.last === t) return;
+  const y = new Date(); y.setDate(y.getDate() - 1);
+  G.days = (G.last === dayKey(y)) ? G.days + 1 : 1; G.last = t; saveG();
+}
 
 /* ---------- audio ---------- */
 let ac = null, analyser = null, stream = null, buf = null, tone = null;
@@ -241,6 +285,47 @@ function playTone(m, dur, vol){
   });
 }
 
+function playSeq(sq, vol){
+  return new Promise(res => {
+    stopTone();
+    try { ac.resume(); } catch(e){}
+    vol = vol || 0.5;
+    let t = ac.currentTime + 0.08; const t00 = t, oscs = [], masters = [];
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3200; lp.connect(ac.destination);
+    sq.forEach(q => {
+      const f = mtof(q.m), dur = q.d, rel = Math.min(0.12, dur * 0.3);
+      const master = ac.createGain();
+      master.gain.setValueAtTime(0, t);
+      master.gain.linearRampToValueAtTime(vol, t + 0.03);
+      master.gain.setValueAtTime(vol, t + Math.max(0.04, dur - rel - 0.04));
+      master.gain.linearRampToValueAtTime(0, t + dur - 0.02);
+      master.connect(lp); masters.push(master);
+      [[1,1],[2,.4],[3,.2],[4,.08]].forEach(([k,g]) => {
+        const o = ac.createOscillator(); o.type = 'sine'; o.frequency.value = f * k;
+        const gn = ac.createGain(); gn.gain.value = g / 1.68;
+        o.connect(gn); gn.connect(master); o.start(t); o.stop(t + dur + 0.05); oscs.push(o);
+      });
+      t += dur + q.r;
+    });
+    let done = false;
+    const timer = setTimeout(fin, (t - ac.currentTime) * 1000 + 120);
+    function fin(){ if (done) return; done = true; clearTimeout(timer); res(); }
+    tone = { stop(){ try { masters.forEach(g => { g.gain.cancelScheduledValues(ac.currentTime); g.gain.setValueAtTime(0, ac.currentTime); }); oscs.forEach(o => { try { o.stop(); } catch(e){} }); } catch(e){} fin(); } };
+  });
+}
+const playSeqOrTone = sq => sq.length === 1 ? playTone(sq[0].m, sq[0].d) : playSeq(sq);
+
+function chimeUp(){
+  if (!ac || !S.chime) return;
+  const t = ac.currentTime + 0.02;
+  [523, 659, 784, 1047].forEach((f, i) => {
+    const o = ac.createOscillator(), g = ac.createGain(), d = i * 0.12;
+    o.type = 'sine'; o.frequency.value = f;
+    g.gain.setValueAtTime(0, t + d); g.gain.linearRampToValueAtTime(.2, t + d + .01); g.gain.exponentialRampToValueAtTime(.001, t + d + .6);
+    o.connect(g); g.connect(ac.destination); o.start(t + d); o.stop(t + d + .65);
+  });
+}
+
 function chime(ok){
   if (!ac || !S.chime) return;
   const t = ac.currentTime + 0.02;
@@ -285,6 +370,7 @@ const median = a => { const b = a.slice().sort((p,q) => p - q); return b[b.lengt
 
 /* ---------- toestand ---------- */
 let st = 'idle';               // idle | listen | sing | result
+let seq = [{ m:60, d:2.5, r:0 }], frames = [], forced = null, lastSeqKey = '';
 let target = null, attempts = 0, revealed = false, runId = 0, lastTarget = -1;
 let hist = [], med = [], seg = [], segT0 = 0, lastV = 0, singStart = 0, frozenT = 0, liveM = null, outcome = null;
 
@@ -294,18 +380,48 @@ function pick(){
   lastTarget = m; return m;
 }
 
+function genSeq(){
+  const l = curLevel(), v = VOICES[S.voice];
+  if (forced) return forced.map(m => ({ m, d: 1.2, r: 0 }));
+  let n = l.n; if (gameOn() && G.lvl === MAXL) n = 5 + (Math.random() < 0.5 ? 1 : 0);
+  if (n === 1) return [{ m: pick(), d: S.dur, r: 0 }];
+  let out, tries = 0;
+  do {
+    out = []; let m = v.lo + Math.floor(Math.random() * (v.hi - v.lo + 1));
+    out.push(m);
+    for (let i = 1; i < n; i++){
+      let c, k = 0;
+      do { const st_ = 1 + Math.floor(Math.random() * l.step); c = m + (Math.random() < 0.5 ? -st_ : st_); k++; } while ((c < v.lo || c > v.hi || c === m) && k < 40);
+      if (c < v.lo || c > v.hi || c === m) c = m + ((m - v.lo) > (v.hi - m) ? -1 : 1);
+      out.push(c); m = c;
+    }
+    tries++;
+  } while (tries < 6 && JSON.stringify(out) === lastSeqKey);
+  lastSeqKey = JSON.stringify(out);
+  const U = Math.max(0.7, Math.min(1.6, S.dur * 0.5));
+  const res = out.map(m => ({ m, d: U, r: 0 }));
+  if (l.rh >= 1){
+    res.forEach(q => { if (Math.random() < 0.5) q.d = U * 0.5; });
+    if (!res.some(q => q.d === U)) res[Math.floor(Math.random() * n)].d = U;
+    if (!res.some(q => q.d !== U)) res[Math.floor(Math.random() * n)].d = U * 0.5;
+  }
+  if (l.rh >= 2) res.forEach((q, i) => { if (i < n - 1 && Math.random() < 0.45) q.r = U * 0.5; });
+  return res;
+}
+
 async function newRound(){
   if (!ac) return;
-  target = pick(); attempts = 0; revealed = false; stats.rounds++; saveStats();
+  seq = genSeq(); target = seq[0].m; attempts = 0; revealed = false; stats.rounds++; saveStats();
+  if (gameOn()) touchDay();
   await startAttempt();
 }
 
 async function startAttempt(){
   const id = ++runId;
   stopTone();
-  attempts++; st = 'listen'; hist = []; med = []; seg = []; liveM = null; outcome = null;
+  attempts++; st = 'listen'; hist = []; med = []; seg = []; frames = []; liveM = null; outcome = null;
   ui();
-  await playTone(target, S.dur);
+  await playSeqOrTone(seq);
   if (id !== runId) return;
   await sleep(450);
   if (id !== runId) return;
@@ -313,8 +429,9 @@ async function startAttempt(){
   ui();
 }
 
-function judge(sung){
-  let dev = sung - target, oct = 0;
+function judge(sung){ return judgeOne(sung, target, curTol()); }
+function judgeOne(sung, tgt, tol){
+  let dev = sung - tgt, oct = 0;
   if (S.octave){
     const d = ((dev + 6) % 12 + 12) % 12 - 6;
     oct = Math.round((dev - d) / 12); dev = d;
@@ -322,7 +439,7 @@ function judge(sung){
     // zonder octaaf-vrijheid telt het volledige verschil
   }
   const cents = dev * 100;
-  const ok = Math.abs(cents) <= S.tol && (S.octave || Math.abs(dev) < 6);
+  const ok = Math.abs(cents) <= tol && (S.octave || Math.abs(dev) < 6);
   return { ok, cents, dev, oct, sung };
 }
 
@@ -330,8 +447,109 @@ function finish(sungMidi, now){
   const j = judge(sungMidi);
   st = 'result'; frozenT = now; revealed = true; outcome = j;
   if (j.ok && attempts === 1){ stats.first++; saveStats(); }
+  const ac_ = Math.abs(j.cents);
+  j.info = progressRound(j.ok, ac_ <= 12 ? 3 : (ac_ <= curTol() * 0.6 ? 2 : 1));
   if (j.ok) chime(true);
+  if (j.info && j.info.up) setTimeout(chimeUp, 500);
   ui(); showResult(j);
+}
+
+function progressRound(pass, stars){
+  if (!gameOn()) return null;
+  const info = { stars: 0 };
+  if (pass){
+    G.bad = 0;
+    info.stars = attempts > 1 ? 1 : stars; G.stars += info.stars;
+    if (attempts === 1){
+      G.streak++; if (G.streak > G.best) G.best = G.streak;
+      if (stars >= 2){
+        G.pips = Math.min(PIPS, G.pips + 1);
+        if (G.pips >= PIPS && G.lvl < MAXL){ G.lvl++; G.pips = 0; G.maxLvl = Math.max(G.maxLvl, G.lvl); info.up = true; }
+      }
+    }
+  } else {
+    if (attempts === 1) G.streak = 0;
+    G.bad++;
+    if (G.bad >= 4 && G.lvl > 1){ G.lvl--; G.pips = 0; G.bad = 0; info.down = true; }
+  }
+  saveG();
+  return info;
+}
+
+/* ---------- reeks van tonen: segmenteren en beoordelen ---------- */
+function segmentFrames(fr){
+  const out = []; let cur = null, dev = [], prevT = -9;
+  const flush = () => { if (cur && cur.f.length) out.push(cur); cur = null; };
+  for (const f of fr){
+    if (cur && f.t - prevT > 0.15){ flush(); dev = []; }
+    prevT = f.t;
+    if (!cur){ cur = { f: [f] }; dev = []; continue; }
+    const base = median(cur.f.slice(-8).map(x => x.m));
+    if (Math.abs(f.m - base) > 0.75){
+      dev.push(f); if (dev.length > 12) dev.shift();
+      const l5 = dev.slice(-5);
+      if (l5.length >= 5 && Math.max(...l5.map(x => x.m)) - Math.min(...l5.map(x => x.m)) < 0.7){
+        flush(); cur = { f: l5.slice() }; dev = [];
+      }
+    } else { dev = []; cur.f.push(f); }
+  }
+  flush();
+  let segs = [];
+  for (const c of out){
+    const t0 = c.f[0].t, t1 = c.f[c.f.length-1].t;
+    let tr = c.f.filter(x => x.t >= t0 + 0.12); if (tr.length < 3) tr = c.f.filter(x => x.t >= t0 + 0.05);
+    if (t1 - t0 < 0.22 || tr.length < 3) continue;
+    segs.push({ t0, t1, m: median(tr.map(x => x.m)) });
+  }
+  const merged = [];
+  for (const g of segs){
+    const p = merged[merged.length-1];
+    if (p && Math.abs(p.m - g.m) < 0.5 && g.t0 - p.t1 < 0.2){ p.t1 = g.t1; } else merged.push(Object.assign({}, g));
+  }
+  return merged;
+}
+
+function finishSeq(segs, now){
+  const n = seq.length, tol = curTol();
+  const notes = seq.map((q, i) => {
+    const sg = segs[i];
+    if (!sg) return { missing:true, ok:false, target:q.m, cents:0, dev:0 };
+    return Object.assign(judgeOne(sg.m, q.m, tol), { t0:sg.t0, t1:sg.t1, target:q.m });
+  });
+  const rhythmChecked = gameOn() && curLevel().rh >= 1;
+  let rhythmOk = true;
+  if (rhythmChecked && segs.length >= n){
+    const o = []; let tt = 0; seq.forEach(q => { o.push(tt); tt += q.d + q.r; });
+    const pp = segs.slice(0, n).map(g => g.t0);
+    const k = (pp[n-1] - pp[0]) / (o[n-1] - o[0]);
+    rhythmOk = k > 0.6 && k < 1.7;
+    for (let i = 1; i < n; i++) if (Math.abs((pp[i] - pp[0]) - k * (o[i] - o[0])) > 0.3 * Math.max(1, k)) rhythmOk = false;
+  } else if (rhythmChecked) rhythmOk = false;
+  const pass = segs.length >= n && notes.every(x => x.ok);
+  const avg = notes.reduce((a, x) => a + Math.abs(x.cents), 0) / n;
+  let stars = avg <= 15 ? 3 : (avg <= tol * 0.6 ? 2 : 1);
+  if (rhythmChecked && !rhythmOk) stars = 1;
+  st = 'result'; frozenT = now; revealed = true;
+  outcome = { seq:true, notes, pass, ok:pass, avg, rhythmChecked, rhythmOk, extra: segs.length > n, count: segs.length };
+  if (pass && attempts === 1){ stats.first++; saveStats(); }
+  outcome.info = progressRound(pass, stars);
+  if (pass) chime(true);
+  if (outcome.info && outcome.info.up) setTimeout(chimeUp, 500);
+  ui(); showResult(outcome);
+}
+
+let lastSub = '';
+function seqStep(now, m){
+  const n = seq.length;
+  if (m != null){ frames.push({ t: now, m }); lastV = now; }
+  const segs = frames.length ? segmentFrames(frames) : [];
+  $('hold').firstElementChild.style.width = (Math.min(1, segs.length / n) * 100) + '%';
+  const sub = segs.length ? 'Toon ' + Math.min(n, segs.length) + ' van ' + n : 'Zing de ' + n + ' tonen achter elkaar';
+  if (sub !== lastSub){ lastSub = sub; $('cardSub').textContent = sub; }
+  if (!segs.length){ if (now - singStart > 15) failSilence(now); return; }
+  const lastF = frames[frames.length-1], ls = segs[segs.length-1], silent = now - lastV;
+  if (segs.length > n || (segs.length === n && (lastF.t - ls.t0 >= 0.6 || silent > 0.3))) finishSeq(segs, now);
+  else if (segs.length < n && silent > 1.2) finishSeq(segs, now);
 }
 
 function failSilence(now){
@@ -365,7 +583,7 @@ function loop(){
   requestAnimationFrame(loop);
   const now = performance.now() / 1000;
   if (mode === 'stuk'){ if (window.NKstuk) window.NKstuk.frame(ctx, W, H, dpr); return; }
-  const keepGoing = st === 'result' && outcome && outcome.ok;   // na een goed antwoord mag je doorzingen
+  const keepGoing = st === 'result' && outcome && outcome.ok && !outcome.seq;   // na een goed antwoord mag je doorzingen
   if ((st === 'sing' || keepGoing) && analyser){
     analyser.getFloatTimeDomainData(buf);
     const r = detect(buf, ac.sampleRate);
@@ -375,6 +593,9 @@ function loop(){
     hist.push({ t: now, m });
     while (hist.length && now - hist[0].t > 12) hist.shift();
     liveM = m;
+    if (st === 'sing' && seq.length > 1){
+      seqStep(now, m);
+    } else {
     if (st === 'sing'){
       if (m != null){ if (!seg.length) segT0 = now; seg.push({ t: now, m }); lastV = now; }
       else if (seg.length && now - lastV > 0.3){ if (!tryEval(now, true)) seg = []; }
@@ -386,6 +607,7 @@ function loop(){
     } else if (st === 'sing'){
       $('hold').firstElementChild.style.width = '0%';
       if (now - singStart > 15) failSilence(now);
+    }
     }
     updateMeter(liveM);
   } else if (st !== 'sing') {
@@ -405,10 +627,11 @@ function updateMeter(m){
 }
 
 /* ---------- tekenen ---------- */
+function winSec(){ const tot = seq.reduce((a, q) => a + q.d + q.r, 0); return seq.length > 1 ? Math.max(6, tot + 2) : 6; }
 function draw(now){
   const v = VOICES[S.voice], lo = v.lo - 8, hi = v.hi + 4, n = hi - lo + 1;
   const KW = Math.max(64, Math.min(84, W * 0.2)), gw = W - KW, rh = H / n;
-  const pxps = gw / 6;
+  const pxps = gw / winSec(), tg = seq.map(q => q.m);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
   ctx.save(); ctx.translate(KW, 0);
@@ -428,16 +651,17 @@ function draw(now){
   const showTarget = target != null && revealed && (st === 'result' || S.keep);
   if (showTarget){
     for (let m = lo; m <= hi; m++){
-      if (((m - target) % 12 + 12) % 12 !== 0) continue;
-      const main = m === target;
-      if (!main && !S.octave) continue;
+      const idx = tg.indexOf(m);
+      const oct = idx < 0 && S.octave && tg.some(t => ((m - t) % 12 + 12) % 12 === 0);
+      if (idx < 0 && !oct) continue;
+      const main = idx >= 0;
       ctx.fillStyle = main ? 'rgba(60,207,122,.30)' : 'rgba(60,207,122,.12)';
       ctx.fillRect(0, rowY(m), gw, rh);
       if (main){
         ctx.strokeStyle = 'rgba(60,207,122,.9)'; ctx.setLineDash([6, 5]); ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.moveTo(0, centerY(m)); ctx.lineTo(gw, centerY(m)); ctx.stroke(); ctx.setLineDash([]);
         ctx.fillStyle = '#7de3a6'; ctx.font = '600 12px -apple-system,sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-        ctx.fillText('doel ' + nm(m), 10, centerY(m) - rh * 0.0 - 0 + (rh > 22 ? 0 : -rh));
+        ctx.fillText((tg.length > 1 ? (idx + 1) + '. ' : 'doel ') + nm(m), 10, centerY(m) + (rh > 22 ? 0 : -rh));
       }
     }
   }
@@ -470,7 +694,22 @@ function draw(now){
   ctx.stroke();
 
   // verschilpijl na een fout
-  if (st === 'result' && outcome && !outcome.silence && !outcome.ok && target != null){
+  if (st === 'result' && outcome && outcome.seq){
+    outcome.notes.forEach(x => {
+      if (x.missing) return;
+      const tS = x.target + 12 * (x.oct || 0);
+      const xa = gw - (frozenT - x.t0) * pxps, xb = gw - (frozenT - x.t1) * pxps;
+      const col = x.ok ? '#3ccf7a' : '#ff6b5e';
+      ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 2.5;
+      if (tS >= lo && tS <= hi) ctx.strokeRect(xa, rowY(tS) + 1.5, Math.max(6, xb - xa), rh - 3);
+      if (!x.ok){
+        const sy = centerY(Math.max(lo - .5, Math.min(hi + .5, x.sung))), ty = centerY(Math.max(lo, Math.min(hi, tS))), xm = (xa + xb) / 2;
+        ctx.beginPath(); ctx.moveTo(xm, sy); ctx.lineTo(xm, ty); ctx.stroke();
+        const dir = ty < sy ? -1 : 1;
+        ctx.beginPath(); ctx.moveTo(xm, ty); ctx.lineTo(xm - 6, ty - dir * 10); ctx.lineTo(xm + 6, ty - dir * 10); ctx.closePath(); ctx.fill();
+      }
+    });
+  } else if (st === 'result' && outcome && !outcome.silence && !outcome.ok && target != null){
     const tShown = target + 12 * (outcome.oct || 0);
     const ty = centerY(Math.max(lo, Math.min(hi, tShown))), sy = centerY(Math.max(lo - .5, Math.min(hi + .5, outcome.sung)));
     const x = gw - 16;
@@ -483,19 +722,19 @@ function draw(now){
   ctx.restore();
 
   // pianotoetsen (links)
-  const cur = st === 'sing' && liveM != null ? Math.round(liveM) : (st === 'result' && outcome && !outcome.silence ? (outcome.ok ? (liveM != null ? Math.round(liveM) : null) : Math.round(outcome.sung)) : null);
+  const cur = st === 'sing' && liveM != null ? Math.round(liveM) : (st === 'result' && outcome && !outcome.silence && !outcome.seq ? (outcome.ok ? (liveM != null ? Math.round(liveM) : null) : Math.round(outcome.sung)) : null);
   ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
   ctx.font = '600 ' + Math.max(10, Math.min(15, rh * 0.62)) + 'px -apple-system,sans-serif';
   for (let m = lo; m <= hi; m++){
     const y = rowY(m);
     if (isBlack(m)){
-      ctx.fillStyle = (showTarget && m === target) ? '#3ccf7a' : (cur === m ? '#e8890c' : '#17191c');
+      ctx.fillStyle = (showTarget && tg.includes(m)) ? '#3ccf7a' : (cur === m ? '#e8890c' : '#17191c');
       ctx.fillRect(0, y, KW, rh + 0.5);
-      if ((showTarget && m === target) || cur === m){ ctx.fillStyle = '#10130f'; ctx.fillText(nm(m), KW - 9, y + rh / 2 + 0.5); }
+      if ((showTarget && tg.includes(m)) || cur === m){ ctx.fillStyle = '#10130f'; ctx.fillText(nm(m), KW - 9, y + rh / 2 + 0.5); }
       continue;
     }
     let fill = '#c6cadb';
-    if (showTarget && m === target) fill = '#3ccf7a';
+    if (showTarget && tg.includes(m)) fill = '#3ccf7a';
     else if (cur === m) fill = '#e8890c';
     ctx.fillStyle = fill; ctx.fillRect(0, y, KW, rh + 0.5);
     ctx.fillStyle = 'rgba(30,32,40,.55)'; ctx.fillRect(0, y, KW, 1);
@@ -513,20 +752,38 @@ const svgCheck = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 const svgUp = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V5M5.5 11.5L12 5l6.5 6.5"/></svg>';
 const svgDown = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v15M5.5 12.5L12 19l6.5-6.5"/></svg>';
 
+function hud(){
+  const c = $('chip');
+  if (!gameOn()){
+    c.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg><span>' + stats.first + '/' + stats.rounds + '</span>';
+    return;
+  }
+  let p = ''; for (let i = 0; i < PIPS; i++) p += '<i class="' + (i < G.pips ? 'on' : '') + '"></i>';
+  c.innerHTML = '<b>Niv ' + G.lvl + '</b><span class="pips">' + p + '</span><span class="st">★ ' + G.stars + '</span>' +
+    (G.streak >= 2 ? '<span class="fire">🔥 ' + G.streak + '</span>' : '') + (G.days >= 2 ? '<span>📅 ' + G.days + '</span>' : '');
+}
+const starStr = k => k ? '★'.repeat(k) + '☆'.repeat(3 - k) : '';
+function lvlMsg(info){
+  if (!info) return '';
+  if (info.up) return 'Niveau omhoog! Je zit nu op niveau ' + G.lvl + ': ' + LEVELS[G.lvl].name + '.';
+  if (info.down) return 'Even een stapje terug naar niveau ' + G.lvl + ': ' + LEVELS[G.lvl].name + '. Oefen hier rustig verder, dan kom je er weer door.';
+  return '';
+}
+
 function ui(){
   const card = $('card'), res = $('res');
-  $('score').textContent = stats.first + '/' + stats.rounds;
+  hud();
   if (st === 'listen'){
     res.hidden = true; card.hidden = false;
     $('cardIcon').innerHTML = '<div class="eq"><i></i><i></i><i></i><i></i></div>';
     $('cardTitle').textContent = 'Luister goed';
-    $('cardSub').textContent = attempts > 1 ? 'Dezelfde toon nog een keer' : 'Je hoort een toon';
+    $('cardSub').textContent = seq.length > 1 ? (attempts > 1 ? 'Dezelfde ' + seq.length + ' tonen nog een keer' : 'Je hoort ' + seq.length + ' tonen achter elkaar') : (attempts > 1 ? 'Dezelfde toon nog een keer' : 'Je hoort een toon');
     $('hold').hidden = true;
   } else if (st === 'sing'){
     res.hidden = true; card.hidden = false;
     $('cardIcon').innerHTML = '<div class="mic"></div>';
-    $('cardTitle').textContent = 'Zing de toon na';
-    $('cardSub').textContent = 'Houd de toon even vast';
+    $('cardTitle').textContent = seq.length > 1 ? 'Zing ze na' : 'Zing de toon na';
+    lastSub = ''; $('cardSub').textContent = seq.length > 1 ? 'Zing de ' + seq.length + ' tonen achter elkaar' : 'Houd de toon even vast';
     $('hold').hidden = false; $('hold').firstElementChild.style.width = '0%';
   } else { card.hidden = true; }
 }
@@ -535,13 +792,14 @@ function btn(label, cls, fn){ const b = document.createElement('button'); b.clas
 
 function showResult(j){
   const res = $('res'), badge = $('badge'), t = $('resTitle'), d = $('resDetail'), hint = $('resHint'), bt = $('resBtns');
-  bt.innerHTML = ''; hint.textContent = '';
+  bt.innerHTML = ''; hint.textContent = ''; $('resNotes').innerHTML = ''; $('resStars').textContent = ''; $('lvlUp').textContent = '';
+  if (j.seq) return showSeqResult(j);
   if (j.silence){
     badge.className = 'badge neutral'; badge.textContent = '?';
     t.textContent = 'Ik hoor je niet'; d.textContent = 'Zing wat luider of dichter bij de microfoon.';
     bt.append(btn('Opnieuw', 'main', () => startAttempt()), btn('Andere toon', '', newRound));
   } else if (j.ok){
-    badge.className = 'badge ok'; badge.innerHTML = svgCheck;
+    badge.className = 'badge ok'; badge.style.fontSize = ''; badge.innerHTML = svgCheck;
     const ac_ = Math.abs(j.cents);
     t.textContent = ac_ <= 12 ? 'Zuiver!' : 'Goed zo!';
     let det = 'Je zong ' + nm(target);
@@ -549,6 +807,7 @@ function showResult(j){
     d.textContent = det + '.';
     if (j.oct) hint.textContent = 'Dat was ' + (Math.abs(j.oct) > 1 ? Math.abs(j.oct) + ' octaven' : 'een octaaf') + (j.oct < 0 ? ' lager' : ' hoger') + ' dan het voorbeeld. Dat telt mee.';
     else hint.textContent = attempts > 1 ? 'Gelukt na ' + attempts + ' pogingen.' : 'In één keer goed.';
+    if (j.info){ $('resStars').textContent = starStr(j.info.stars); $('lvlUp').textContent = lvlMsg(j.info); }
     bt.append(btn('Toon horen', '', async () => { await playTone(target, S.dur); }), btn('Volgende toon', 'ok', newRound));
   } else {
     const absC = Math.abs(j.cents), needHigher = j.dev < 0;
@@ -561,13 +820,46 @@ function showResult(j){
     } else {
       t.textContent = 'Nog niet helemaal';
       d.textContent = 'Je zong ' + nm(Math.round(j.sung)) + '. De toon was ' + nm(target) + '.';
-      hint.textContent = 'Zing ' + semis + ' halve toon' + (semis === 1 ? '' : 'en') + ' ' + (needHigher ? 'hoger' : 'lager') + '. Tik op een toets om hem te horen.';
+      hint.textContent = 'Zing ' + semis + ' halve ton' + (semis === 1 ? 'e' : 'en') + ' ' + (needHigher ? 'hoger' : 'lager') + '. Tik op een toets om hem te horen.';
     }
     if (!S.octave && Math.abs(j.dev) >= 6) {
       const o = Math.round(j.dev / 12);
       if (o) { d.textContent = 'Je zong een octaaf te ' + (o > 0 ? 'hoog' : 'laag') + '.'; }
     }
+    if (j.info) $('lvlUp').textContent = lvlMsg(j.info);
     bt.append(btn('Andere toon', '', newRound), btn('Probeer opnieuw', 'main', () => startAttempt()));
+  }
+  res.hidden = false;
+}
+
+function showSeqResult(j){
+  const res = $('res'), badge = $('badge'), t = $('resTitle'), d = $('resDetail'), hint = $('resHint'), bt = $('resBtns'), nn = $('resNotes');
+  const n = j.notes.length, okc = j.notes.filter(x => x.ok).length;
+  j.notes.forEach((x, i) => {
+    const c = document.createElement('span'); c.className = 'nc ' + (x.ok ? 'ok' : 'bad');
+    c.textContent = (i + 1) + '. ' + nm(x.target) + (x.ok ? ' ✓' : (x.missing ? ' ?' : (x.dev < 0 ? ' ↑' : ' ↓')));
+    nn.append(c);
+  });
+  if (j.info) $('lvlUp').textContent = lvlMsg(j.info);
+  if (j.pass){
+    badge.className = 'badge ok'; badge.style.fontSize = ''; badge.innerHTML = svgCheck;
+    t.textContent = j.avg <= 15 ? 'Zuiver!' : 'Goed zo!';
+    d.textContent = 'Alle ' + n + ' tonen kloppen' + (j.extra ? ' (er kwamen nog wat extra tonen achteraan)' : '') + '.';
+    if (j.info) $('resStars').textContent = starStr(j.info.stars);
+    if (j.rhythmChecked) hint.textContent = j.rhythmOk ? 'Het ritme klopte ook.' : 'De tonen klopten, maar het ritme kan strakker. Luister nog eens naar de lengte van de tonen en de pauzes.';
+    else hint.textContent = attempts > 1 ? 'Gelukt na ' + attempts + ' pogingen.' : 'In één keer goed.';
+    bt.append(btn('Horen', '', () => playSeqOrTone(seq)), btn('Volgende', 'ok', newRound));
+  } else {
+    badge.className = 'badge bad'; badge.style.fontSize = '22px'; badge.textContent = okc + '/' + n;
+    t.textContent = okc >= n - 1 && okc > 0 ? 'Bijna!' : 'Nog niet helemaal';
+    d.textContent = okc + ' van de ' + n + ' tonen goed.';
+    const i = j.notes.findIndex(x => !x.ok), x = j.notes[i];
+    if (x.missing) hint.textContent = 'Ik hoorde maar ' + j.count + ' van de ' + n + ' tonen. Zing alle tonen achter elkaar.';
+    else {
+      const needHigher = x.dev < 0, ab = Math.abs(x.cents), semis = Math.round(Math.abs(x.dev));
+      hint.textContent = 'Toon ' + (i + 1) + ' (' + nm(x.target) + '): zing ' + (ab < 100 ? 'een fractie' : semis + ' halve ton' + (semis === 1 ? 'e' : 'en')) + ' ' + (needHigher ? 'hoger' : 'lager') + '. ↑ = hoger zingen, ↓ = lager.';
+    }
+    bt.append(btn('Horen', '', () => playSeqOrTone(seq)), btn('Opnieuw', 'main', () => startAttempt()), btn('Andere', '', newRound));
   }
   res.hidden = false;
 }
@@ -600,6 +892,13 @@ function seg_(el, items, cur, on){
 const voiceItems = Object.keys(VOICES).map(k => [k, VOICES[k].label]);
 function renderVoice(el){ seg_(el, voiceItems, S.voice, v => { S.voice = v; saveS(); lastTarget = -1; }); }
 function renderSettings(){
+  seg_($('gameSet'), [[true, 'Spel met niveaus'], [false, 'Vrij oefenen']], !!S.game, v => { S.game = v; saveS(); hud(); renderSettings(); });
+  $('lvlBox').hidden = !S.game;
+  if (S.game){
+    const it = []; for (let i = 1; i <= G.maxLvl; i++) it.push([i, String(i)]);
+    seg_($('lvlSet'), it, G.lvl, v => { G.lvl = v; G.pips = 0; G.bad = 0; saveG(); hud(); $('lvlName').textContent = LEVELS[v].name; });
+    $('lvlName').textContent = LEVELS[G.lvl].name + (G.maxLvl < MAXL ? '. Hogere niveaus ontgrendel je door te spelen.' : '.');
+  }
   renderVoice($('voiceSet'));
   seg_($('tolSet'), [[20,'Streng ±20'],[35,'Normaal ±35'],[50,'Ruim ±50']], S.tol, v => { S.tol = v; saveS(); });
   seg_($('durSet'), [[1.5,'Kort'],[2.5,'Normaal'],[4,'Lang']], S.dur, v => { S.dur = v; saveS(); });
@@ -618,7 +917,13 @@ $('closeSet').onclick = () => {
 [['swOct','octave'],['swKeep','keep'],['swChime','chime']].forEach(([id, key]) => {
   $(id).onclick = () => { S[key] = !S[key]; saveS(); renderSettings(); };
 });
-$('resetScore').onclick = () => { stats.rounds = 0; stats.first = 0; saveStats(); $('score').textContent = '0/0'; };
+let rsArm = false;
+$('resetScore').onclick = () => {
+  const b = $('resetScore');
+  if (!rsArm){ rsArm = true; b.textContent = 'Zeker weten? Tik nog eens'; setTimeout(() => { rsArm = false; b.textContent = 'Voortgang op nul zetten'; }, 4000); return; }
+  rsArm = false; b.textContent = 'Voortgang op nul zetten';
+  stats.rounds = 0; stats.first = 0; saveStats(); G = Object.assign({}, DEFG); saveG(); hud(); renderSettings();
+};
 
 renderVoice($('voiceStart'));
 async function startApp(want){
@@ -668,7 +973,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 }
 
 // hulp bij testen
-window.__nk = { setTarget(m){ target = m; }, get st(){ return st; }, get outcome(){ return outcome; } };
+window.__nk = { setTarget(m){ target = m; seq = [{ m, d:2.5, r:0 }]; }, force(a){ forced = a; }, get st(){ return st; }, get outcome(){ return outcome; }, get seq(){ return seq; }, get G(){ return G; }, segmentFrames, feed(fr, now){ st = 'sing'; frames = fr; const sg = segmentFrames(fr); const n = seq.length; finishSeq(sg, now || (fr.length ? fr[fr.length-1].t : 0)); } };
 
 resize(); ui(); requestAnimationFrame(loop);
 })();
