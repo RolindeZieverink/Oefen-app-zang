@@ -67,7 +67,7 @@ function parseXML(text){
             const n = open.get(key); n.d += d;
             if (!ties.includes('start')) open.delete(key);
           } else {
-            const n = { b: mq + start / div, d, m, meas: mi, lyr: lyricOf(el) };
+            const n = { b: mq + start / div, d, m, meas: mi, lyr: lyricOf(el), v: voice };
             notes.push(n);
             if (ties.includes('start')) open.set(key, n);
           }
@@ -242,7 +242,7 @@ function loadO(){ let o; try { o = Object.assign({}, DEF, (JSON.parse(localStora
 function savePiece(){
   try {
     const pcs = piece ? { title: piece.title,
-      parts: piece.parts.map(p => ({ name: p.name, notes: p.notes.map(n => [+n.b.toFixed(4), +n.d.toFixed(4), n.m, n.meas, n.lyr]) })),
+      parts: piece.parts.map(p => ({ name: p.name, notes: p.notes.map(n => [+n.b.toFixed(4), +n.d.toFixed(4), n.m, n.meas, n.lyr, n.v == null ? '' : n.v]) })),
       measures: piece.measures.map(m => [m.i, m.label, +m.b.toFixed(4), +m.len.toFixed(4)]), tempo: piece.tempo, time: piece.time, kies: piece.kies || null } : null;
     localStorage.setItem(LS, JSON.stringify({ o: O, piece: pcs, partIdx, from, to }));
   } catch(e){}
@@ -253,7 +253,7 @@ function restore(){
     if (!d.piece) return false;
     const p = d.piece;
     piece = finishPiece({ title: p.title,
-      parts: p.parts.map(q => ({ name: q.name, notes: q.notes.map(a => ({ b:a[0], d:a[1], m:a[2], meas:a[3], lyr:a[4] })) })),
+      parts: p.parts.map(q => ({ name: q.name, notes: q.notes.map(a => ({ b:a[0], d:a[1], m:a[2], meas:a[3], lyr:a[4], v:a[5] })) })),
       measures: p.measures.map(a => ({ i:a[0], label:a[1], b:a[2], len:a[3] })), tempo: p.tempo, time: p.time });
     if (p.kies) piece.kies = p.kies;
     partIdx = Math.min(d.partIdx || 0, piece.parts.length - 1);
@@ -272,14 +272,54 @@ function demoPiece(){
   return finishPiece({ title: 'Voorbeeld: do-re-mi', parts: [{ name: 'Oefenmelodie', notes: ns }], measures, tempo: [[0, 80]], time: [[0, 4, 4]] });
 }
 
-function reduce(arr){
-  const out = []; let i = 0;
-  while (i < arr.length){
-    let j = i; while (j + 1 < arr.length && Math.abs(arr[j+1].b - arr[i].b) < 1e-4) j++;
-    let pick = arr[i];
-    for (let k = i; k <= j; k++) if (O.chord === 'top' ? arr[k].m > pick.m : arr[k].m < pick.m) pick = arr[k];
-    out.push(Object.assign({}, pick)); i = j + 1;
+/* Per maat: de stemmen (voices) van deze partij op hoogte rangschikken en de gekozen lijn nemen.
+   Hoog = bovenste lijn, Laag = onderste lijn, Midden = middelste (bij drie lijnen). Binnen één lijn kiest dezelfde keuze
+   de bovenste, middelste of onderste noot van een akkoord. */
+function lineSets(arr){
+  const byM = new Map();
+  for (const n of arr){ let l = byM.get(n.meas); if (!l) byM.set(n.meas, l = []); l.push(n); }
+  const out = [];
+  for (const [meas, ns] of byM){
+    const vs = new Map();
+    for (const n of ns){ const k = n.v == null || n.v === '' ? '1' : String(n.v); let o = vs.get(k); if (!o) vs.set(k, o = { notes: [], sum: 0, dur: 0 }); o.notes.push(n); o.sum += n.m; o.dur += n.d; }
+    let lines = [...vs.values()];
+    const maxDur = Math.max(...lines.map(l => l.dur));
+    lines = lines.filter(l => l.dur >= 0.3 * maxDur);
+    lines.forEach(l => { l.avg = l.sum / l.notes.length; });
+    lines.sort((a, b) => b.avg - a.avg);
+    out.push({ meas, lines });
   }
+  return out;
+}
+function chordGroups(ns){
+  const g = []; let i = 0;
+  while (i < ns.length){ let j = i; while (j + 1 < ns.length && Math.abs(ns[j+1].b - ns[i].b) < 1e-4) j++; g.push(ns.slice(i, j + 1)); i = j + 1; }
+  return g;
+}
+const maxLinesCache = new WeakMap();
+function maxLines(p){
+  let r = maxLinesCache.get(p); if (r != null) return r;
+  r = 1;
+  for (const { lines } of lineSets(p.notes)){
+    if (lines.length > 1) r = Math.max(r, lines.length);
+    else if (lines.length === 1) for (const g of chordGroups(lines[0].notes.slice().sort((a, b) => a.b - b.b || a.m - b.m))) r = Math.max(r, g.length);
+  }
+  r = Math.min(r, 3); maxLinesCache.set(p, r); return r;
+}
+function reduce(arr){
+  const mode = O.chord;
+  const picked = [];
+  for (const { lines } of lineSets(arr)){
+    const k = lines.length;
+    const li = mode === 'top' ? 0 : mode === 'bottom' ? k - 1 : (k >= 3 ? Math.floor((k - 1) / 2) : k - 1);
+    const ns = lines[li].notes.slice().sort((a, b) => a.b - b.b || a.m - b.m);
+    for (const g of chordGroups(ns)){
+      const s = g.slice().sort((a, b) => a.m - b.m), c = s.length;
+      const pick = mode === 'top' ? s[c - 1] : mode === 'bottom' ? s[0] : s[c >= 3 ? Math.floor((c - 1) / 2) : 0];
+      picked.push(Object.assign({}, pick));
+    }
+  }
+  const out = picked.sort((a, b) => a.b - b.b || a.m - b.m);
   for (let k = 0; k < out.length - 1; k++) if (out[k+1].b < out[k].b + out[k].d - 1e-4) out[k].d = out[k+1].b - out[k].b;
   return out;
 }
@@ -802,8 +842,8 @@ sheet.innerHTML = `<div class="wrap">
 <h2>Tempo</h2><div class="seg" id="spdSeg"></div>
 <h2>Niveau</h2><div class="seg" id="lvlSeg"></div>
 <div class="small" id="lvlHint"></div>
-<h2>Bij gedeelde stemmen</h2><div class="seg" id="chordSeg"></div>
-<div class="small">Heeft een stem op één moment twee noten, dan oefen je de bovenste of onderste.</div>
+<div id="chordWrap" hidden><h2>Bij gedeelde stemmen</h2><div class="seg" id="chordSeg"></div>
+<div class="small" id="chordHint"></div></div>
 <div class="small" style="margin-top:14px">Het volume van elke stem stel je in met de knop “Mixer” onderin het scherm. Gebruik oordopjes als er stemmen meespelen tijdens het zingen.</div>
 <h2>Opties</h2>
 <div class="row"><div>Metronoom</div><button class="sw" id="swClick" aria-label="Klik"></button></div>
@@ -835,7 +875,7 @@ function renderSetup(){
   $('partWrap').hidden = !piece;
   if (piece){
     const names = partNames();
-    seg($('partSeg'), names.map((n, i) => [i, n]).filter(([i, n]) => !piece.kies || piece.kies.includes(n)), partIdx, v => { partIdx = v; prepare(); });
+    seg($('partSeg'), names.map((n, i) => [i, n]).filter(([i, n]) => !piece.kies || piece.kies.includes(n)), partIdx, v => { partIdx = v; prepare(); renderSetup(); });
     const first = piece.measures[0].label, last = piece.measures[piece.measures.length - 1].label;
     $('mFrom').value = from; $('mTo').value = to;
     $('mHint').textContent = 'Maat ' + first + ' tot en met ' + last + ' beschikbaar.';
@@ -844,7 +884,14 @@ function renderSetup(){
   { const lh = { easy: 'Ruim: toon mag ±50 cent afwijken en het ritme maximaal 0,7 seconde.', medium: 'Gemiddeld: toon ±40 cent, ritme maximaal 0,5 seconde.', hard: 'Streng: toon ±35 cent, ritme maximaal 0,3 seconde.' };
     seg($('lvlSeg'), [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard']], O.level, v => { O.level = v; $('lvlHint').textContent = lh[v]; });
     $('lvlHint').textContent = lh[O.level] || ''; }
-  seg($('chordSeg'), [['top', 'Bovenste noot'], ['bottom', 'Onderste noot']], O.chord, v => { O.chord = v; prepare(); });
+  { const nl = piece ? maxLines(piece.parts[partIdx]) : 1;
+    $('chordWrap').hidden = nl < 2;
+    if (nl >= 2){
+      const items = nl >= 3 ? [['top', 'Hoog'], ['mid', 'Midden'], ['bottom', 'Laag']] : [['top', 'Hoog'], ['bottom', 'Laag']];
+      if (!items.some(x => x[0] === O.chord)){ O.chord = 'top'; prepare(); }
+      seg($('chordSeg'), items, O.chord, v => { O.chord = v; prepare(); });
+      $('chordHint').textContent = nl >= 3 ? 'Deze stem splitst zich in drie. Kies welke lijn je oefent: de hoogste, de middelste of de laagste.' : 'Deze stem splitst zich in twee. Kies welke lijn je oefent: de hoogste of de laagste.';
+    } }
   $('swClick').classList.toggle('on', O.click); $('sMet').classList.toggle('on', O.click);
 }
 [['swClick', 'click']].forEach(([id, k]) => { $(id).onclick = () => { O[k] = !O[k]; renderSetup(); }; });
