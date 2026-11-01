@@ -30,12 +30,12 @@ body:not(.stuk) #spart{display:none!important}
 #spov .dim{background:rgba(251,250,246,.72)}
 #spov .st{mix-blend-mode:multiply;border-radius:4px}
 #spov .st.goed{background:rgba(60,207,122,.28)}#spov .st.wankel{background:rgba(232,137,12,.30)}#spov .st.opnieuw{background:rgba(255,107,94,.30)}
-#spov .flag{background:#e8890c;color:#1c1105;font:700 11px/1 -apple-system,sans-serif;padding:4px 7px;border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,.3)}
-#spov .edge{background:#e8890c;width:3px;border-radius:2px}
+#spov .flag{background:#7332ff;color:#fff;font:700 11px/1 -apple-system,sans-serif;padding:4px 7px;border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+#spov .edge{background:#7332ff;width:3px;border-radius:2px}
 #spov .mk{width:20px;height:20px;margin:-10px 0 0 -10px;border-radius:50%;mix-blend-mode:multiply}
 #spov .mk.ok{background:rgba(40,190,100,.55)}#spov .mk.high,#spov .mk.low{background:rgba(255,80,70,.6)}#spov .mk.none{background:rgba(120,125,140,.5)}
 #spov .mk.sel{outline:2px solid #1c1105}
-#spov .ph{width:2px;background:#e8890c;box-shadow:0 0 0 1px rgba(232,137,12,.35);display:none}
+#spov .ph{width:2px;background:#7332ff;box-shadow:0 0 0 1px rgba(115,50,255,.4);display:none}
 #spload{position:absolute;inset:0;display:grid;place-items:center;background:rgba(251,250,246,.9);color:#444;font-size:15px;z-index:3}
 #spload[hidden]{display:none}
 #spctl{position:absolute;right:8px;top:8px;display:flex;gap:6px;z-index:2}
