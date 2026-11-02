@@ -291,7 +291,7 @@ let state = 'idle';     // idle | count | listen | sing | done
 let run = null;
 let pan = 0, sel = null, geom = null;   // terugkijken na afloop
 
-function loadO(){ let o; try { o = Object.assign({}, DEF, (JSON.parse(localStorage.getItem(LS) || '{}').o) || {}); if (o.mixV !== 3){ o.volL = {}; o.volS = {}; o.mixV = 3; } } catch(e){ o = Object.assign({}, DEF); } return o; }
+function loadO(){ let o; try { o = Object.assign({}, DEF, (JSON.parse(localStorage.getItem(LS) || '{}').o) || {}); o.latAuto = true; if (o.mixV !== 3){ o.volL = {}; o.volS = {}; o.mixV = 3; } } catch(e){ o = Object.assign({}, DEF); } return o; }
 function savePiece(){
   try {
     const pcs = piece ? { title: piece.title,
@@ -907,8 +907,6 @@ sheet.innerHTML = `<div class="wrap">
 <h2>Tempo</h2><div class="seg" id="spdSeg"></div>
 <h2>Niveau</h2><div class="seg" id="lvlSeg"></div>
 <div class="small" id="lvlHint"></div>
-<h2>Oortjes (vertraging)</h2><div class="seg" id="latSeg"></div>
-<div class="small" id="latHint"></div>
 <div id="chordWrap" hidden><h2>Bij gedeelde stemmen</h2><div class="seg" id="chordSeg"></div>
 <div class="small" id="chordHint"></div></div>
 <div class="small" style="margin-top:14px">Het volume van elke stem stel je in met de knop “Mixer” onderin het scherm. Gebruik oordopjes als er stemmen meespelen tijdens het zingen.</div>
@@ -947,12 +945,6 @@ function renderSetup(){
     $('mFrom').value = from; $('mTo').value = to;
     $('mHint').textContent = 'Maat ' + first + ' tot en met ' + last + ' beschikbaar.';
   }
-  { const fm = v => Math.round(v * 1000) + ' ms';
-    const lh = v => v === 'auto' ? 'Automatisch (aanbevolen): de app meet zelf hoeveel vertraging je oortjes hebben en past dat per apparaat aan. Nu: ' + fm(O.lat || 0) + '.' : v === 0 ? 'Geen extra vertraging: goed voor een speaker of bedrade oortjes.' : 'Vaste vertraging van ' + fm(v) + '. Verhoog dit als je de tonen merkbaar later hoort dan je ze ziet.';
-    const items = [['auto', 'Auto'], [0, 'Geen'], [.15, 'Klein'], [.25, 'Middel'], [.35, 'Groot']];
-    const cur = () => O.latAuto ? 'auto' : (O.lat || 0);
-    const pick = v => { if (v === 'auto'){ O.latAuto = true; ensureLat(); } else { O.latAuto = false; O.lat = v; } seg($('latSeg'), items, cur(), pick); $('latHint').textContent = lh(cur()); savePiece(); };
-    seg($('latSeg'), items, cur(), pick); $('latHint').textContent = lh(cur()); }
   seg($('spdSeg'), [[.5, '50%'], [.7, '70%'], [.85, '85%'], [1, '100%']], O.speed, v => { O.speed = v; });
   { const lh = { easy: 'Ruim: toon mag ±50 cent afwijken en het ritme maximaal 0,7 seconde.', medium: 'Gemiddeld: toon ±40 cent, ritme maximaal 0,5 seconde.', hard: 'Streng: toon ±35 cent, ritme maximaal 0,3 seconde.' };
     seg($('lvlSeg'), [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard']], O.level, v => { O.level = v; $('lvlHint').textContent = lh[v]; });
