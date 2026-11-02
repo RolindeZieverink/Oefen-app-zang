@@ -243,7 +243,7 @@ function savePiece(){
   try {
     const pcs = piece ? { title: piece.title,
       parts: piece.parts.map(p => ({ name: p.name, notes: p.notes.map(n => [+n.b.toFixed(4), +n.d.toFixed(4), n.m, n.meas, n.lyr, n.v == null ? '' : n.v]) })),
-      measures: piece.measures.map(m => [m.i, m.label, +m.b.toFixed(4), +m.len.toFixed(4)]), tempo: piece.tempo, time: piece.time, kies: piece.kies || null, verdeling: piece.verdeling || null } : null;
+      measures: piece.measures.map(m => [m.i, m.label, +m.b.toFixed(4), +m.len.toFixed(4)]), tempo: piece.tempo, time: piece.time, kies: piece.kies || null } : null;
     localStorage.setItem(LS, JSON.stringify({ o: O, piece: pcs, partIdx, from, to }));
   } catch(e){}
 }
@@ -256,7 +256,6 @@ function restore(){
       parts: p.parts.map(q => ({ name: q.name, notes: q.notes.map(a => ({ b:a[0], d:a[1], m:a[2], meas:a[3], lyr:a[4], v:a[5] })) })),
       measures: p.measures.map(a => ({ i:a[0], label:a[1], b:a[2], len:a[3] })), tempo: p.tempo, time: p.time });
     if (p.kies) piece.kies = p.kies;
-    if (p.verdeling) piece.verdeling = p.verdeling;
     partIdx = Math.min(d.partIdx || 0, piece.parts.length - 1);
     const first = piece.measures[0].label, last = piece.measures[piece.measures.length-1].label;
     from = Math.max(first, d.from || first); to = Math.min(last, d.to || last);
@@ -837,7 +836,6 @@ sheet.innerHTML = `<div class="wrap">
 <h1 style="font-size:28px;margin-top:14px" id="vbTitle"></h1>
 <div class="small" id="vbInfo"></div>
 <div id="partWrap"><h2>Stem</h2><div class="seg" id="partSeg"></div><button class="go sec" id="histBtn" style="margin-top:12px">Mijn resultaten bij deze stem</button><button class="go sec" id="recBtn" style="margin-top:10px">Mijn opnames</button><button class="go sec" id="rewBtn" style="margin-top:10px">Mijn medailles</button></div>
-<div id="verdWrap" hidden><details class="verd"><summary>Stemverdeling</summary><div id="verdBody"></div></details></div>
 <h2>Maten</h2>
 <div class="stp"><input id="mFrom" type="number" inputmode="numeric" min="1"><span>tot en met</span><input id="mTo" type="number" inputmode="numeric" min="1"><button class="btn" id="mAll" style="flex:none;padding:11px 14px">Alles</button></div>
 <div class="small" id="mHint"></div>
@@ -875,8 +873,6 @@ function renderSetup(){
   $('vbInfo').textContent = piece ? piece.parts.length + (piece.parts.length === 1 ? ' stem' : ' stemmen') + ' · ' + fmtLen() + ' maten' : '';
   $('vaCont').hidden = !piece; if (piece) $('vaCont').textContent = 'Verder met “' + piece.title + '”';
   $('partWrap').hidden = !piece;
-  { const q = t => String(t).replace(/[&<>]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[c])); const vd = piece && piece.verdeling; $('verdWrap').hidden = !(vd && vd.length);
-    if (vd && vd.length) $('verdBody').innerHTML = vd.map(g => '<div class="vg"><b>' + q(g.stem) + '</b><span>' + g.namen.map(q).join('<br>') + '</span></div>').join(''); }
   if (piece){
     const names = partNames();
     seg($('partSeg'), names.map((n, i) => [i, n]).filter(([i, n]) => !piece.kies || piece.kies.includes(n)), partIdx, v => { partIdx = v; prepare(); renderSetup(); });
@@ -971,14 +967,22 @@ $('fileAdd').onchange = async e => { const f = [...(e.target.files || [])]; awai
 const KK = 'naklank-koor';
 let koor = null;   // { id, key, idx }
 const koorMsg = t => { $('koorMsg').textContent = t || ''; };
-let koorPdfMenu = false;
+let koorPdfMenu = false, koorVerdMenu = false;
 function renderKoor(){
   $('koorOut').hidden = !!koor; $('koorIn').hidden = !koor;
-  if (!koor){ koorPdfMenu = false; return; }
-  $('koorNaam').textContent = (koorPdfMenu ? 'PDF’s – ' : '') + (koor.idx.koor || 'Mijn koor');
+  if (!koor){ koorPdfMenu = false; koorVerdMenu = false; return; }
+  $('koorNaam').textContent = (koorPdfMenu ? 'PDF’s – ' : koorVerdMenu ? 'Stemverdeling – ' : '') + (koor.idx.koor || 'Mijn koor');
   const l = $('koorList'); l.innerHTML = '';
   const mk = (cls, txt, fn, css) => { const x = document.createElement('button'); x.type = 'button'; x.className = cls; if (css) x.style.cssText = css; x.innerHTML = txt; x.onclick = fn; l.append(x); return x; };
   const metPdf = koor.idx.stukken.filter(s => s.pdf && s.pdf.length);
+  if (koorVerdMenu){
+    mk('btn', '‹ Terug naar de stukken', () => { koorVerdMenu = false; renderKoor(); }, 'flex:none;padding:10px 14px;justify-self:start');
+    const q = t => String(t).replace(/[&<>]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[c]));
+    (koor.idx.verdelingen || []).forEach(v => {
+      l.insertAdjacentHTML('beforeend', '<div style="font-weight:650;margin-top:10px">' + q(v.titel) + '</div>' + (v.groepen || []).map(g => '<div class="vg"><b>' + q(g.stem) + '</b><span>' + (g.namen || []).map(q).join('<br>') + '</span></div>').join(''));
+    });
+    return;
+  }
   if (koorPdfMenu){
     mk('btn', '‹ Terug naar de stukken', () => { koorPdfMenu = false; renderKoor(); }, 'flex:none;padding:10px 14px;justify-self:start');
     if (!metPdf.length) l.insertAdjacentHTML('beforeend', '<div class="small">Er staan nog geen PDF’s klaar.</div>');
@@ -995,6 +999,7 @@ function renderKoor(){
     const b = mk('kstuk', '<span><b style="font-size:17px">' + esc(st.titel) + '</b></span><span style="color:var(--accent-t);font-weight:700;font-size:20px">›</span>', () => koorLoad(st));
   });
   mk('go sec', 'PDF’s', () => { koorPdfMenu = true; renderKoor(); }, 'margin-top:6px');
+  if (koor.idx.verdelingen && koor.idx.verdelingen.length) mk('go sec', 'Stemverdeling', () => { koorVerdMenu = true; renderKoor(); }, 'margin-top:10px');
 }
 const crcT = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++){ let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
 const crc32 = u => { let c = 0xFFFFFFFF; for (let i = 0; i < u.length; i++) c = crcT[(c ^ u[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
@@ -1071,7 +1076,6 @@ async function koorLoad(st){
       files.push(new File([await window.NKkoor.decrypt(koor.key, await r.arrayBuffer())], b.naam));
     }
     await loadFiles(files, false, st.titel);
-    if (piece){ piece.verdeling = (st.verdeling && st.verdeling.length) ? st.verdeling : null; renderSetup(); savePiece(); }
     if (st.kies && st.kies.length && piece){   // alleen deze stemmen als keuzeknop; de rest staat wel in de mixer
       piece.kies = st.kies.slice();
       const f = partNames().findIndex(n => piece.kies.includes(n));
@@ -1083,7 +1087,7 @@ async function koorLoad(st){
 }
 $('koorGo').onclick = () => koorUnlock($('koorCode').value, false);
 $('koorCode').onkeydown = e => { if (e.key === 'Enter') koorUnlock($('koorCode').value, false); };
-$('koorUit').onclick = () => { koor = null; koorPdfMenu = false; try { localStorage.removeItem(KK); localStorage.removeItem(KK + '-idx'); } catch(_){} $('koorCode').value = ''; renderKoor(); };
+$('koorUit').onclick = () => { koor = null; koorPdfMenu = false; koorVerdMenu = false; try { localStorage.removeItem(KK); localStorage.removeItem(KK + '-idx'); } catch(_){} $('koorCode').value = ''; renderKoor(); };
 // uitnodigingslink: ...#koor=CODE
 (() => {
   const m = /(?:^|[#&])koor=([^&]+)/.exec(location.hash || '');
