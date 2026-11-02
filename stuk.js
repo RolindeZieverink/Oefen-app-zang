@@ -6,7 +6,9 @@ if (!C) return;
 const $ = id => document.getElementById(id);
 const { nm, isBlack, mtof, median } = C;
 const LS = 'naklank-stuk';
-const LAT = 0.08;               // vertraging tussen horen/zien en zingen (seconden)
+const LAT = 0.08;
+const latT = () => LAT + (O.lat || 0);   // + extra vertraging door oortjes (bluetooth)
+const latD = () => O.lat || 0;               // vertraging tussen horen/zien en zingen (seconden)
 const WINDOW = 8;               // seconden zichtbaar in beeld
 const PLAYHEAD = 0.25;          // plek van de afspeellijn (aandeel van de breedte)
 const STEP = { C:0, D:2, E:4, F:5, G:7, A:9, B:11 };
@@ -231,7 +233,7 @@ async function parseFile(file){
 /* =========================================================
    Stuk, stem, tijdlijn
    ========================================================= */
-const DEF = { chord:'top', level:'medium', speed:1, click:false, volL:{}, volS:{}, mixMode:'L', zoom:1 };
+const DEF = { lat:0, chord:'top', level:'medium', speed:1, click:false, volL:{}, volS:{}, mixMode:'L', zoom:1 };
 let O = loadO();
 let piece = null, partIdx = 0, from = 1, to = 1, notes = [];
 let state = 'idle';     // idle | count | listen | sing | done
@@ -485,7 +487,7 @@ function rhythmOf(rn, n){
   const L = curLvl(), i = rn._ix ? rn._ix.get(n) : rn.notes.indexOf(n);
   const prev = rn.notes[i - 1], next = rn.notes[i + 1];
   const close = f => f.m != null && Math.abs(foldDev(f.m - n.m)) <= 1.0;
-  const T = rn.t0 + n.s + LAT, TE = rn.t0 + n.e + LAT, fr = rn.frames;
+  const T = rn.t0 + n.s + latT(), TE = rn.t0 + n.e + latT(), fr = rn.frames;
   // begin: alleen als het begin goed te horen is (pauze ervoor of een andere toon ervoor)
   const canOn = !prev || prev.e < n.s - 0.08 || Math.abs(foldDev(prev.m - n.m)) > 1.3;
   if (canOn){
@@ -518,7 +520,7 @@ function rhythmOf(rn, n){
 }
 function evalNote(rn, n){
   const dur = n.e - n.s, skip = Math.min(0.3, dur * 0.35);
-  const a = rn.t0 + n.s + skip + LAT, b = rn.t0 + n.e + LAT - 0.03;
+  const a = rn.t0 + n.s + skip + latT(), b = rn.t0 + n.e + latT() - 0.03;
   let tot = 0; const v = [];
   for (const f of rn.frames){ if (f.t < a) continue; if (f.t > b) break; tot++; if (f.m != null) v.push(f.m); }
   if (tot < 2 || v.length < 2 || v.length < 0.3 * tot) return { k: 'none' };
@@ -535,7 +537,7 @@ function scoreAll(rn, final){
   if (!rn._ix || rn._ixn !== rn.notes.length){ rn._ix = new Map(rn.notes.map((x, i) => [x, i])); rn._ixn = rn.notes.length; }
   for (const n of rn.notes){
     if (n.status) continue;
-    if (!final && now < rn.t0 + n.e + LAT + 0.05 + curLvl().off + 0.2) break;
+    if (!final && now < rn.t0 + n.e + latT() + 0.05 + curLvl().off + 0.2) break;
     n.status = evalNote(rn, n);
   }
 }
@@ -560,7 +562,7 @@ async function start(kind){
 // tussentijds stoppen met zingen: je krijgt toch een analyse van wat je gezongen hebt
 function stopSing(){
   if (!run || run.kind !== 'sing' || state !== 'sing'){ stopAll(); return; }
-  const el = C.ac.currentTime - run.t0 - LAT;
+  const el = C.ac.currentTime - run.t0 - latT();
   recStop(); stopAudio(run);
   run.notes = run.notes.filter(n => n.status || n.s + Math.min(0.3, (n.e - n.s) * 0.35) + 0.35 <= el);
   run.dur = Math.max(0.5, el);
@@ -594,7 +596,7 @@ function frame(ctx, W, H, dpr){
   // in rust: het hele stuk, te verschuiven; begint bij de gekozen maat
   let idleM = -0.6;
   if (!run && piece && notes.length){ const rv = buildRunView(); if (idleT == null) idleT = initIdleT(rv); idleM = idleT; }
-  const mnow = !run ? idleM : (state === 'done' ? run.frozen + pan : now - run.t0);
+  const mnow = !run ? idleM : (state === 'done' ? run.frozen + pan : now - run.t0 - latD());
   if (window.NKscore) scoreFrame(mnow);
 
   // toonbereik van deze stem
@@ -654,11 +656,11 @@ function frame(ctx, W, H, dpr){
     if (run && run.frames.length){
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.beginPath();
       let pen = false, pt = 0;
-      let startK = 0; for (let k = run.frames.length - 1; k >= 0; k--){ if (phX + ((run.frames[k].t - run.t0) - mnow) * pxps < -4){ startK = k; break; } }
+      let startK = 0; for (let k = run.frames.length - 1; k >= 0; k--){ if (phX + ((run.frames[k].t - run.t0 - latD()) - mnow) * pxps < -4){ startK = k; break; } }
       for (let k = startK; k < run.frames.length; k++){
         const f = run.frames[k];
         if (f.m == null || f.m < lo - 3 || f.m > hi + 3){ pen = false; continue; }
-        const x = phX + ((f.t - run.t0) - mnow) * pxps, y = (hi - Math.max(lo - .5, Math.min(hi + .5, f.m)) + .5) * rh;
+        const x = phX + ((f.t - run.t0 - latD()) - mnow) * pxps, y = (hi - Math.max(lo - .5, Math.min(hi + .5, f.m)) + .5) * rh;
         if (!pen || f.t - pt > 0.12){ ctx.moveTo(x, y); pen = true; } else ctx.lineTo(x, y);
         pt = f.t;
       }
@@ -842,6 +844,8 @@ sheet.innerHTML = `<div class="wrap">
 <h2>Tempo</h2><div class="seg" id="spdSeg"></div>
 <h2>Niveau</h2><div class="seg" id="lvlSeg"></div>
 <div class="small" id="lvlHint"></div>
+<h2>Oortjes (vertraging)</h2><div class="seg" id="latSeg"></div>
+<div class="small" id="latHint"></div>
 <div id="chordWrap" hidden><h2>Bij gedeelde stemmen</h2><div class="seg" id="chordSeg"></div>
 <div class="small" id="chordHint"></div></div>
 <div class="small" style="margin-top:14px">Het volume van elke stem stel je in met de knop “Mixer” onderin het scherm. Gebruik oordopjes als er stemmen meespelen tijdens het zingen.</div>
@@ -880,6 +884,9 @@ function renderSetup(){
     $('mFrom').value = from; $('mTo').value = to;
     $('mHint').textContent = 'Maat ' + first + ' tot en met ' + last + ' beschikbaar.';
   }
+  { const lh = { 0: 'Geen extra vertraging: goed voor een speaker of bedrade oortjes.', .15: 'Kleine vertraging: past bij de meeste draadloze oortjes.', .25: 'Gemiddelde vertraging: past bij AirPods en andere bluetooth-oortjes.', .35: 'Grote vertraging: kies dit als je de tonen merkbaar later hoort dan je ze ziet.', .5: 'Heel grote vertraging: alleen voor erg trage bluetooth-verbindingen.' };
+    seg($('latSeg'), [[0, 'Geen'], [.15, 'Klein'], [.25, 'Middel'], [.35, 'Groot'], [.5, 'Heel groot']], O.lat || 0, v => { O.lat = v; $('latHint').textContent = lh[v]; savePiece(); });
+    $('latHint').textContent = lh[O.lat || 0] || 'Eigen waarde: ' + Math.round((O.lat || 0) * 1000) + ' ms.'; }
   seg($('spdSeg'), [[.5, '50%'], [.7, '70%'], [.85, '85%'], [1, '100%']], O.speed, v => { O.speed = v; });
   { const lh = { easy: 'Ruim: toon mag ±50 cent afwijken en het ritme maximaal 0,7 seconde.', medium: 'Gemiddeld: toon ±40 cent, ritme maximaal 0,5 seconde.', hard: 'Streng: toon ±35 cent, ritme maximaal 0,3 seconde.' };
     seg($('lvlSeg'), [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard']], O.level, v => { O.level = v; $('lvlHint').textContent = lh[v]; });
