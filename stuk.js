@@ -9,6 +9,49 @@ const LS = 'naklank-stuk';
 const LAT = 0.08;
 const latT = () => LAT + (O.lat || 0);   // + extra vertraging door oortjes (bluetooth)
 const latD = () => O.lat || 0;
+/* ---- automatische vertraging (oortjes) ----
+   O.latAuto aan: de app kiest zelf. Eerst een schatting op grond van het type microfoon (bluetooth of niet),
+   daarna meet hij na elke zangpoging hoe laat je begint en past de vertraging per apparaat aan. */
+const BTRE = /airpods|bluetooth|beats|buds|bose|jabra|sennheiser|jbl|sony|wh-1000|wf-1000|hearphones|galaxy|pixel/i;
+function devKey(){ try { const t = C.stream && C.stream.getAudioTracks()[0]; return (t && t.label) || 'standaard'; } catch(_){ return 'standaard'; } }
+function ensureLat(){
+  if (!O.latAuto) return;
+  if (!O.latBy) O.latBy = {};
+  const k = devKey();
+  if (O.latBy[k] != null){ O.lat = O.latBy[k]; return; }
+  let g = BTRE.test(k) ? 0.2 : 0;
+  try { const ol = (C.ac.outputLatency || 0) + (C.ac.baseLatency || 0); if (ol > 0.04) g = Math.max(g, Math.min(0.5, ol)); } catch(_){}
+  O.lat = Math.round(g * 100) / 100;
+}
+function learnLat(rn){
+  try {
+    if (!O.latAuto || !rn || rn.kind !== 'sing') return;
+    const fr = rn.frames, ds = [];
+    rn.notes.forEach((n, i) => {
+      const prev = rn.notes[i - 1];
+      if (prev && !(prev.e < n.s - 0.08 || Math.abs(foldDev(prev.m - n.m)) > 1.3)) return;
+      if (n.e - n.s < 0.3) return;
+      const T = rn.t0 + n.s, close = f => f.m != null && Math.abs(foldDev(f.m - n.m)) <= 1.0;
+      for (let j = 0; j + 2 < fr.length; j++){
+        const f = fr[j]; if (f.t < T - 0.15) continue; if (f.t > T + 0.8) break;
+        if (close(f) && close(fr[j + 1]) && close(fr[j + 2])){ ds.push(f.t - T); break; }
+      }
+    });
+    if (ds.length < 6) return;
+    ds.sort((a, b) => a - b);
+    const q = p => ds[Math.floor(p * (ds.length - 1))], med = q(0.5);
+    if (q(0.75) - q(0.25) > 0.4) return;   // te onregelmatig om iets van te leren
+    const target = Math.max(0, Math.min(0.6, med - LAT)), k = devKey();
+    if (!O.latBy) O.latBy = {};
+    const old = O.latBy[k] != null ? O.latBy[k] : (O.lat || 0);
+    const w = O.latBy[k] != null ? 0.5 : 1;   // eerste meting: meteen overnemen, daarna bijsturen
+    O.latBy[k] = O.lat = Math.round((old + w * (target - old)) * 100) / 100;
+    savePiece();
+    return Math.abs(O.lat - old) > 0.06;   // flinke verschuiving: deze poging opnieuw beoordelen
+  } catch(_){}
+  return false;
+}
+function relearn(rn){ if (learnLat(rn)){ rn.notes.forEach(n => { n.status = null; }); scoreAll(rn, true); } }
 let paused = false;   // pauze: de audio-klok staat stil, dus muziek, beeld en beoordeling staan op dezelfde plek stil
 function unpause(){ if (!paused) return; paused = false; try { if (C.ac) C.ac.resume(); } catch(_){} try { if (recM && recM.state === 'paused') recM.resume(); } catch(_){} }
 function togglePause(){
@@ -241,7 +284,7 @@ async function parseFile(file){
 /* =========================================================
    Stuk, stem, tijdlijn
    ========================================================= */
-const DEF = { lat:0, chord:'top', level:'medium', speed:1, click:false, volL:{}, volS:{}, mixMode:'L', zoom:1 };
+const DEF = { lat:0, latAuto:true, latBy:{}, chord:'top', level:'medium', speed:1, click:false, volL:{}, volS:{}, mixMode:'L', zoom:1 };
 let O = loadO();
 let piece = null, partIdx = 0, from = 1, to = 1, notes = [];
 let state = 'idle';     // idle | count | listen | sing | done
@@ -560,7 +603,7 @@ async function start(kind){
   if (!piece || !notes.length){ openSetup(); return; }
   if (!buildRunPreview().notes.length){ updateNone(); return; }
   if (!C.ac) return;
-  unpause(); stopAudio(run); sres.hidden = true; pan = 0; sel = null; lastPan = 0; if (window.NKscore) NKscore.clearMarks();
+  unpause(); ensureLat(); stopAudio(run); sres.hidden = true; pan = 0; sel = null; lastPan = 0; if (window.NKscore) NKscore.clearMarks();
   try { await C.ac.resume(); } catch(e){}
   const rn = buildRun(kind), now = C.ac.currentTime;
   if (kind === 'sing'){ rn.cs = now + 0.25; rn.t0 = rn.cs + rn.nPulse * rn.pulse; state = 'count'; }
@@ -575,7 +618,7 @@ function stopSing(){
   recStop(); stopAudio(run);
   run.notes = run.notes.filter(n => n.status || n.s + Math.min(0.3, (n.e - n.s) * 0.35) + 0.35 <= el);
   run.dur = Math.max(0.5, el);
-  scoreAll(run, true);
+  scoreAll(run, true); relearn(run);
   run.frozen = Math.max(0.5, el) + 0.5; state = 'done'; pan = 0; sel = null;
   saveAttempt(run); rewardAttempt(run); showResult(); refresh();
 }
@@ -583,7 +626,7 @@ function finish(){
   if (!run) return;
   unpause();
   if (run.kind === 'sing'){
-    recStop(); scoreAll(run, true); run.frozen = run.dur + 0.5; state = 'done'; saveAttempt(run); rewardAttempt(run); showResult();
+    recStop(); scoreAll(run, true); relearn(run); run.frozen = run.dur + 0.5; state = 'done'; saveAttempt(run); rewardAttempt(run); showResult();
   } else { stopAudio(run); run = null; state = 'idle'; }
   refresh();
 }
@@ -904,9 +947,12 @@ function renderSetup(){
     $('mFrom').value = from; $('mTo').value = to;
     $('mHint').textContent = 'Maat ' + first + ' tot en met ' + last + ' beschikbaar.';
   }
-  { const lh = { 0: 'Geen extra vertraging: goed voor een speaker of bedrade oortjes.', .15: 'Kleine vertraging: past bij de meeste draadloze oortjes.', .25: 'Gemiddelde vertraging: past bij AirPods en andere bluetooth-oortjes.', .35: 'Grote vertraging: kies dit als je de tonen merkbaar later hoort dan je ze ziet.', .5: 'Heel grote vertraging: alleen voor erg trage bluetooth-verbindingen.' };
-    seg($('latSeg'), [[0, 'Geen'], [.15, 'Klein'], [.25, 'Middel'], [.35, 'Groot'], [.5, 'Heel groot']], O.lat || 0, v => { O.lat = v; $('latHint').textContent = lh[v]; savePiece(); });
-    $('latHint').textContent = lh[O.lat || 0] || 'Eigen waarde: ' + Math.round((O.lat || 0) * 1000) + ' ms.'; }
+  { const fm = v => Math.round(v * 1000) + ' ms';
+    const lh = v => v === 'auto' ? 'Automatisch (aanbevolen): de app meet zelf hoeveel vertraging je oortjes hebben en past dat per apparaat aan. Nu: ' + fm(O.lat || 0) + '.' : v === 0 ? 'Geen extra vertraging: goed voor een speaker of bedrade oortjes.' : 'Vaste vertraging van ' + fm(v) + '. Verhoog dit als je de tonen merkbaar later hoort dan je ze ziet.';
+    const items = [['auto', 'Auto'], [0, 'Geen'], [.15, 'Klein'], [.25, 'Middel'], [.35, 'Groot']];
+    const cur = () => O.latAuto ? 'auto' : (O.lat || 0);
+    const pick = v => { if (v === 'auto'){ O.latAuto = true; ensureLat(); } else { O.latAuto = false; O.lat = v; } seg($('latSeg'), items, cur(), pick); $('latHint').textContent = lh(cur()); savePiece(); };
+    seg($('latSeg'), items, cur(), pick); $('latHint').textContent = lh(cur()); }
   seg($('spdSeg'), [[.5, '50%'], [.7, '70%'], [.85, '85%'], [1, '100%']], O.speed, v => { O.speed = v; });
   { const lh = { easy: 'Ruim: toon mag ±50 cent afwijken en het ritme maximaal 0,7 seconde.', medium: 'Gemiddeld: toon ±40 cent, ritme maximaal 0,5 seconde.', hard: 'Streng: toon ±35 cent, ritme maximaal 0,3 seconde.' };
     seg($('lvlSeg'), [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard']], O.level, v => { O.level = v; $('lvlHint').textContent = lh[v]; });
@@ -1782,6 +1828,6 @@ window.NKstuk = {
   frame,
   enter(){ medBuf = []; if (!piece && restore()) prepare(); if (piece && !piece.xml && window.NKscore) NKscore.loadXml(piece.title).then(x => { if (x && piece && !piece.xml) piece.xml = x; }); koorAuto().then(() => { if (!sheet.hidden) renderSetup(); }); openSetup('A'); },
   leave(){ stopAll(); sheet.hidden = true; hist.hidden = true; opnSheet.hidden = true; rewSheet.hidden = true; if (window.NKscore) NKscore.hide(); },
-  _t: { parseXML, parseMidi, parseFile, reduce, evalNote, rewardAttempt, openRew, get O(){ return O; }, LAT, demoPiece, finishPiece, get state(){ return state; }, get run(){ return run; }, get notes(){ return notes; }, setPiece, get piece(){ return piece; } }
+  _t: { learnLat, ensureLat, parseXML, parseMidi, parseFile, reduce, evalNote, rewardAttempt, openRew, get O(){ return O; }, LAT, demoPiece, finishPiece, get state(){ return state; }, get run(){ return run; }, get notes(){ return notes; }, setPiece, get piece(){ return piece; } }
 };
 })();
