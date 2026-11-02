@@ -837,13 +837,13 @@ sheet.innerHTML = `<div class="wrap">
 <h1 style="font-size:28px;margin-top:14px" id="vbTitle"></h1>
 <div class="small" id="vbInfo"></div>
 <div id="partWrap"><h2>Stem</h2><div class="seg" id="partSeg"></div><button class="go sec" id="histBtn" style="margin-top:12px">Mijn resultaten bij deze stem</button><button class="go sec" id="recBtn" style="margin-top:10px">Mijn opnames</button><button class="go sec" id="rewBtn" style="margin-top:10px">Mijn medailles</button></div>
+<div id="verdWrap" hidden><details class="verd"><summary>Stemverdeling</summary><div id="verdBody"></div></details></div>
 <h2>Maten</h2>
 <div class="stp"><input id="mFrom" type="number" inputmode="numeric" min="1"><span>tot en met</span><input id="mTo" type="number" inputmode="numeric" min="1"><button class="btn" id="mAll" style="flex:none;padding:11px 14px">Alles</button></div>
 <div class="small" id="mHint"></div>
 <h2>Tempo</h2><div class="seg" id="spdSeg"></div>
 <h2>Niveau</h2><div class="seg" id="lvlSeg"></div>
 <div class="small" id="lvlHint"></div>
-<div id="verdWrap" hidden><details class="verd"><summary>Stemverdeling</summary><div id="verdBody"></div></details></div>
 <div id="chordWrap" hidden><h2>Bij gedeelde stemmen</h2><div class="seg" id="chordSeg"></div>
 <div class="small" id="chordHint"></div></div>
 <div class="small" style="margin-top:14px">Het volume van elke stem stel je in met de knop “Mixer” onderin het scherm. Gebruik oordopjes als er stemmen meespelen tijdens het zingen.</div>
