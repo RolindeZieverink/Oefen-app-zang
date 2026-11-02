@@ -8,7 +8,15 @@ const { nm, isBlack, mtof, median } = C;
 const LS = 'naklank-stuk';
 const LAT = 0.08;
 const latT = () => LAT + (O.lat || 0);   // + extra vertraging door oortjes (bluetooth)
-const latD = () => O.lat || 0;               // vertraging tussen horen/zien en zingen (seconden)
+const latD = () => O.lat || 0;
+let paused = false;   // pauze: de audio-klok staat stil, dus muziek, beeld en beoordeling staan op dezelfde plek stil
+function unpause(){ if (!paused) return; paused = false; try { if (C.ac) C.ac.resume(); } catch(_){} try { if (recM && recM.state === 'paused') recM.resume(); } catch(_){} }
+function togglePause(){
+  if (!run || !C.ac) return;
+  if (paused){ unpause(); }
+  else { paused = true; try { C.ac.suspend(); } catch(_){} try { if (recM && recM.state === 'recording') recM.pause(); } catch(_){} }
+  refresh();
+}               // vertraging tussen horen/zien en zingen (seconden)
 const WINDOW = 8;               // seconden zichtbaar in beeld
 const PLAYHEAD = 0.25;          // plek van de afspeellijn (aandeel van de breedte)
 const STEP = { C:0, D:2, E:4, F:5, G:7, A:9, B:11 };
@@ -546,13 +554,13 @@ function scoreAll(rn, final){
    Bediening
    ========================================================= */
 function stopAll(){
-  recDiscard(); stopAudio(run); run = null; state = 'idle'; sres.hidden = true; if (window.NKscore) NKscore.clearMarks(); refresh();
+  unpause(); recDiscard(); stopAudio(run); run = null; state = 'idle'; sres.hidden = true; if (window.NKscore) NKscore.clearMarks(); refresh();
 }
 async function start(kind){
   if (!piece || !notes.length){ openSetup(); return; }
   if (!buildRunPreview().notes.length){ updateNone(); return; }
   if (!C.ac) return;
-  stopAudio(run); sres.hidden = true; pan = 0; sel = null; lastPan = 0; if (window.NKscore) NKscore.clearMarks();
+  unpause(); stopAudio(run); sres.hidden = true; pan = 0; sel = null; lastPan = 0; if (window.NKscore) NKscore.clearMarks();
   try { await C.ac.resume(); } catch(e){}
   const rn = buildRun(kind), now = C.ac.currentTime;
   if (kind === 'sing'){ rn.cs = now + 0.25; rn.t0 = rn.cs + rn.nPulse * rn.pulse; state = 'count'; }
@@ -562,6 +570,7 @@ async function start(kind){
 // tussentijds stoppen met zingen: je krijgt toch een analyse van wat je gezongen hebt
 function stopSing(){
   if (!run || run.kind !== 'sing' || state !== 'sing'){ stopAll(); return; }
+  unpause();
   const el = C.ac.currentTime - run.t0 - latT();
   recStop(); stopAudio(run);
   run.notes = run.notes.filter(n => n.status || n.s + Math.min(0.3, (n.e - n.s) * 0.35) + 0.35 <= el);
@@ -572,6 +581,7 @@ function stopSing(){
 }
 function finish(){
   if (!run) return;
+  unpause();
   if (run.kind === 'sing'){
     recStop(); scoreAll(run, true); run.frozen = run.dur + 0.5; state = 'done'; saveAttempt(run); rewardAttempt(run); showResult();
   } else { stopAudio(run); run = null; state = 'idle'; }
@@ -587,7 +597,7 @@ let sungM = null, medBuf = [];
 function frame(ctx, W, H, dpr){
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
   const ac = C.ac, now = ac ? ac.currentTime : 0;
-  if (run){
+  if (run && !paused){
     if (state === 'count' && now >= run.t0){ state = 'sing'; refresh(); }
     if (state === 'sing' && C.analyser){ C.analyser.getFloatTimeDomainData(C.buf); sample(now); scoreAll(run, false); }
     if ((state === 'sing' || state === 'listen') && now - run.t0 > run.dur + (run.kind === 'sing' ? 0.9 : 0.4)) finish();
@@ -624,6 +634,15 @@ function frame(ctx, W, H, dpr){
       if (x < -40 || x > gw + 4) continue;
       ctx.fillStyle = 'rgba(255,255,255,.22)'; ctx.fillRect(x, 0, 1, H);
       ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.fillText(String(ms.label), x + 4, 4);
+    }
+    // gekozen maten (alleen in rust, en alleen als het niet het hele stuk is)
+    if (!run){
+      const fi = labelToIdx(from), ti = labelToIdx(to), ms0 = piece.measures[fi], ms1 = piece.measures[ti];
+      if (ms0 && ms1 && (fi > 0 || ti < piece.measures.length - 1)){
+        const xa = phX + (rn.sec(ms0.b) - mnow) * pxps, xb = phX + (rn.sec(ms1.b + ms1.len) - mnow) * pxps;
+        ctx.fillStyle = 'rgba(115,50,255,.16)'; ctx.fillRect(xa, 0, xb - xa, H);
+        ctx.fillStyle = '#7332ff'; ctx.fillRect(xa, 0, xb - xa, 3);
+      }
     }
     // doelnoten
     const bh = Math.max(6, rh * 0.78);
@@ -784,7 +803,7 @@ body.stuk #bar,body.stuk #res,body.stuk #card,body.stuk #meter,body.stuk #chip{d
 .hrow .t{flex:1;min-width:0;font-size:14px}.hrow .t small{display:block;color:var(--mute);font-size:12px;margin-top:2px}
 .hrow button{flex:none;padding:8px 12px;border-radius:10px;background:#262636;font-weight:600;font-size:13px;color:#fff}
 #nav button{flex:1;padding:9px 8px;border-radius:10px;background:#2f333b;font-size:13px;font-weight:600;color:#d7dae5}
-#sbar .col{width:64px}#sbar .col .lbl{white-space:nowrap}#sMet.on{background:var(--orange);color:#fff}#sMet.on svg{stroke:#fff}
+#sbar .col{width:60px}#sbar button:disabled{opacity:.3}#sPause.on{background:var(--orange);color:#fff}#sbar .col .lbl{white-space:nowrap}#sMet.on{background:var(--orange);color:#fff}#sMet.on svg{stroke:#fff}
 `;
 document.head.append(css);
 
@@ -794,7 +813,7 @@ head.innerHTML = '<div class="a" id="sheadA"></div><div class="b" id="sheadB"></
 
 const szoom = document.createElement('div'); szoom.id = 'szoom'; szoom.className = 'stuk-only';
 szoom.innerHTML = '<button id="zIn" aria-label="Inzoomen">+</button><button id="zOut" aria-label="Uitzoomen">−</button>'; stage.append(szoom);
-const shint = document.createElement('div'); shint.id = 'shint'; shint.className = 'stuk-only'; shint.textContent = '← Sleep om naar een andere maat te gaan →'; shint.hidden = true; stage.append(shint);
+const shint = document.createElement('div'); shint.id = 'shint'; shint.className = 'stuk-only'; shint.textContent = 'Tik op een maat voor begin en einde · sleep om te bladeren'; shint.hidden = true; stage.append(shint);
 const sno = document.createElement('div'); sno.id = 'snone'; sno.className = 'stuk-only'; sno.hidden = true; stage.append(sno);
 const sres = document.createElement('div'); sres.id = 'sres'; sres.className = 'stuk-only'; sres.hidden = true;
 sres.innerHTML = '<div class="top"><div class="badge" id="sbadge"></div><div style="min-width:0"><div id="stitle"></div><div id="sdetail"></div></div></div><div id="sissues"></div><div id="srewmsg"></div><div id="srec"></div><div class="btns" id="sbtns"></div>';
@@ -805,6 +824,7 @@ sbar.innerHTML = `
 <div class="col"><button id="sMix" aria-label="Mixer"><svg viewBox="0 0 24 24"><path d="M5 4v16M12 4v16M19 4v16"/><circle cx="5" cy="14" r="2" fill="currentColor"/><circle cx="12" cy="8" r="2" fill="currentColor"/><circle cx="19" cy="15" r="2" fill="currentColor"/></svg></button><span class="lbl">Mixer</span></div>
 <div class="col"><button id="sListen" aria-label="Luister"><svg viewBox="0 0 24 24"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7M18.5 5.5a9 9 0 010 13"/></svg></button><span class="lbl" id="sListenL">Luister</span></div>
 <div class="col"><button id="sSing" class="big" aria-label="Zing mee"><svg viewBox="0 0 24 24" id="sSingI"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg></button><span class="lbl" id="sSingL">Zing mee</span></div>
+<div class="col"><button id="sPause" aria-label="Pauze" disabled><svg viewBox="0 0 24 24" id="sPauseI"><path d="M8 5v14M16 5v14"/></svg></button><span class="lbl" id="sPauseL">Pauze</span></div>
 <div class="col"><button id="sMet" aria-label="Metronoom"><svg viewBox="0 0 24 24"><path d="M9 3h6l4 18H5L9 3z"/><path d="M12 17L16 7"/><circle cx="16" cy="7" r="1.5" fill="currentColor"/></svg></button><span class="lbl" id="sMetL">Metronoom</span></div>`;
 app.append(sbar);
 
@@ -1156,9 +1176,13 @@ function refresh(){
   $('sSingL').textContent = state === 'sing' ? 'Klaar' : (state === 'count' ? 'Stop' : 'Zing mee');
   $('sSingI').innerHTML = (state === 'count' || state === 'sing') ? '<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/>' : '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/>';
   $('sListen').disabled = $('sSing').disabled = false;
+  { const pb = $('sPause'); pb.disabled = !running; pb.classList.toggle('on', paused && running);
+    $('sPauseL').textContent = paused ? 'Hervat' : 'Pauze';
+    $('sPauseI').innerHTML = paused ? '<path d="M7 4l13 8-13 8V4z" fill="currentColor"/>' : '<path d="M8 5v14M16 5v14"/>'; }
   updateHead(); scoreSync();
 }
 $('sListen').onclick = () => { if (state === 'listen') stopAll(); else start('listen'); };
+$('sPause').onclick = togglePause;
 $('sMet').onclick = () => { O.click = !O.click; $('sMet').classList.toggle('on', O.click); const sc = $('swClick'); if (sc) sc.classList.toggle('on', O.click); savePiece(); };
 $('sSing').onclick = () => { if (state === 'sing') stopSing(); else if (state === 'count') stopAll(); else start('sing'); };
 { const hd = $('sheadA'); hd.style.pointerEvents = 'auto'; hd.style.cursor = 'pointer'; hd.title = 'Stem, tempo en opties'; hd.addEventListener('click', e => { if (e.target.closest('button')) return; if (piece) openSetup('B'); }); }
@@ -1532,10 +1556,25 @@ function snapToMeasure(){
   idleT = rv.sec(piece.measures[best].b) - 0.6;
   updateHead(); updateNone(); scoreSync(); if (window.NKscore && NKscore.active) NKscore.scrollToMeasure(best);
 }
+// tik op een maat: eerste tik = beginmaat (alleen die maat), tweede tik = eindmaat; zo isoleer je snel een stukje
+let selStep = 0;
+function tapMeasure(e){
+  if (!geom || !piece || !notes.length) return;
+  const r = cvEl.getBoundingClientRect(), x = e.clientX - r.left - geom.KW;
+  if (x < 0) return;
+  const rv = buildRunView(), sec = geom.mnow + (x - geom.phX) / geom.pxps;
+  let idx = -1; piece.measures.forEach((ms, i) => { if (rv.sec(ms.b) <= sec + 1e-6) idx = i; });
+  if (idx < 0) idx = 0;
+  const fi = labelToIdx(from), lab = piece.measures[idx].label;
+  if (selStep === 0 || idx < fi){ from = to = lab; selStep = 1; }
+  else { to = lab; selStep = 0; }
+  previewKey = ''; savePiece(); updateHead(); updateNone(); scoreSync();
+  if (window.NKscore && NKscore.active) NKscore.scrollToMeasure(idx);
+}
 cvEl.addEventListener('pointerup', e => {
   if (!drag || !geom){ drag = null; return; }
   const d = drag; drag = null;
-  if (d.idle){ if (d.moved) snapToMeasure(); return; }
+  if (d.idle){ if (d.moved) snapToMeasure(); else tapMeasure(e); return; }
   if (d.moved || !run) return;
   const r = cvEl.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, g = geom;
   const m = g.hi - Math.floor(y / g.rh);
