@@ -979,7 +979,7 @@ function renderKoor(){
     mk('btn', '‹ Terug naar de stukken', () => { koorVerdMenu = false; renderKoor(); }, 'flex:none;padding:10px 14px;justify-self:start');
     const q = t => String(t).replace(/[&<>]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[c]));
     (koor.idx.verdelingen || []).forEach(v => {
-      l.insertAdjacentHTML('beforeend', '<div style="font-weight:650;margin-top:10px">' + q(v.titel) + '</div>' + (v.groepen || []).map(g => '<div class="vg"><b>' + q(g.stem) + '</b><span>' + (g.namen || []).map(q).join('<br>') + '</span></div>').join(''));
+      l.insertAdjacentHTML('beforeend', '<div class="vt">' + q(v.titel) + '</div>' + (v.groepen || []).map(g => '<div class="vg"><b>' + q(g.stem) + '</b><span>' + (g.namen || []).map(q).join('<br>') + '</span></div>').join(''));
     });
     return;
   }
