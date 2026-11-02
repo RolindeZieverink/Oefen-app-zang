@@ -243,7 +243,7 @@ function savePiece(){
   try {
     const pcs = piece ? { title: piece.title,
       parts: piece.parts.map(p => ({ name: p.name, notes: p.notes.map(n => [+n.b.toFixed(4), +n.d.toFixed(4), n.m, n.meas, n.lyr, n.v == null ? '' : n.v]) })),
-      measures: piece.measures.map(m => [m.i, m.label, +m.b.toFixed(4), +m.len.toFixed(4)]), tempo: piece.tempo, time: piece.time, kies: piece.kies || null } : null;
+      measures: piece.measures.map(m => [m.i, m.label, +m.b.toFixed(4), +m.len.toFixed(4)]), tempo: piece.tempo, time: piece.time, kies: piece.kies || null, verdeling: piece.verdeling || null } : null;
     localStorage.setItem(LS, JSON.stringify({ o: O, piece: pcs, partIdx, from, to }));
   } catch(e){}
 }
@@ -256,6 +256,7 @@ function restore(){
       parts: p.parts.map(q => ({ name: q.name, notes: q.notes.map(a => ({ b:a[0], d:a[1], m:a[2], meas:a[3], lyr:a[4], v:a[5] })) })),
       measures: p.measures.map(a => ({ i:a[0], label:a[1], b:a[2], len:a[3] })), tempo: p.tempo, time: p.time });
     if (p.kies) piece.kies = p.kies;
+    if (p.verdeling) piece.verdeling = p.verdeling;
     partIdx = Math.min(d.partIdx || 0, piece.parts.length - 1);
     const first = piece.measures[0].label, last = piece.measures[piece.measures.length-1].label;
     from = Math.max(first, d.from || first); to = Math.min(last, d.to || last);
@@ -842,6 +843,7 @@ sheet.innerHTML = `<div class="wrap">
 <h2>Tempo</h2><div class="seg" id="spdSeg"></div>
 <h2>Niveau</h2><div class="seg" id="lvlSeg"></div>
 <div class="small" id="lvlHint"></div>
+<div id="verdWrap" hidden><details class="verd"><summary>Stemverdeling</summary><div id="verdBody"></div></details></div>
 <div id="chordWrap" hidden><h2>Bij gedeelde stemmen</h2><div class="seg" id="chordSeg"></div>
 <div class="small" id="chordHint"></div></div>
 <div class="small" style="margin-top:14px">Het volume van elke stem stel je in met de knop “Mixer” onderin het scherm. Gebruik oordopjes als er stemmen meespelen tijdens het zingen.</div>
@@ -873,6 +875,8 @@ function renderSetup(){
   $('vbInfo').textContent = piece ? piece.parts.length + (piece.parts.length === 1 ? ' stem' : ' stemmen') + ' · ' + fmtLen() + ' maten' : '';
   $('vaCont').hidden = !piece; if (piece) $('vaCont').textContent = 'Verder met “' + piece.title + '”';
   $('partWrap').hidden = !piece;
+  { const q = t => String(t).replace(/[&<>]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[c])); const vd = piece && piece.verdeling; $('verdWrap').hidden = !(vd && vd.length);
+    if (vd && vd.length) $('verdBody').innerHTML = vd.map(g => '<div class="vg"><b>' + q(g.stem) + '</b><span>' + g.namen.map(q).join('<br>') + '</span></div>').join(''); }
   if (piece){
     const names = partNames();
     seg($('partSeg'), names.map((n, i) => [i, n]).filter(([i, n]) => !piece.kies || piece.kies.includes(n)), partIdx, v => { partIdx = v; prepare(); renderSetup(); });
@@ -1067,6 +1071,7 @@ async function koorLoad(st){
       files.push(new File([await window.NKkoor.decrypt(koor.key, await r.arrayBuffer())], b.naam));
     }
     await loadFiles(files, false, st.titel);
+    if (piece){ piece.verdeling = (st.verdeling && st.verdeling.length) ? st.verdeling : null; renderSetup(); savePiece(); }
     if (st.kies && st.kies.length && piece){   // alleen deze stemmen als keuzeknop; de rest staat wel in de mixer
       piece.kies = st.kies.slice();
       const f = partNames().findIndex(n => piece.kies.includes(n));
