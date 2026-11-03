@@ -37,11 +37,11 @@ function learnLat(rn){
         if (close(f) && close(fr[j + 1]) && close(fr[j + 2])){ ds.push(f.t - T); break; }
       }
     });
-    if (ds.length < 6) return;
+    if (ds.length < 8) return;
     ds.sort((a, b) => a - b);
     const q = p => ds[Math.floor(p * (ds.length - 1))], med = q(0.5);
-    if (q(0.75) - q(0.25) > 0.4) return;   // te onregelmatig om iets van te leren
-    const target = Math.max(0, Math.min(0.6, med - LAT)), k = devKey();
+    if (q(0.75) - q(0.25) > 0.22) return;   // te onregelmatig om iets van te leren
+    const target = Math.max(0, Math.min(0.45, med - LAT)), k = devKey();
     if (!O.latBy) O.latBy = {};
     const old = O.latBy[k] != null ? O.latBy[k] : (O.lat || 0);
     const w = O.latBy[k] != null ? 0.5 : 1;   // eerste meting: meteen overnemen, daarna bijsturen
@@ -291,7 +291,7 @@ let state = 'idle';     // idle | count | listen | sing | done
 let run = null;
 let pan = 0, sel = null, geom = null;   // terugkijken na afloop
 
-function loadO(){ let o; try { o = Object.assign({}, DEF, (JSON.parse(localStorage.getItem(LS) || '{}').o) || {}); o.latAuto = true; if (o.mixV !== 3){ o.volL = {}; o.volS = {}; o.mixV = 3; } } catch(e){ o = Object.assign({}, DEF); } return o; }
+function loadO(){ let o; try { o = Object.assign({}, DEF, (JSON.parse(localStorage.getItem(LS) || '{}').o) || {}); o.latAuto = true; if (o.latV !== 2){ o.latV = 2; o.latBy = {}; o.lat = 0; } if (o.mixV !== 3){ o.volL = {}; o.volS = {}; o.mixV = 3; } } catch(e){ o = Object.assign({}, DEF); } return o; }
 function savePiece(){
   try {
     const pcs = piece ? { title: piece.title,
