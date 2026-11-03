@@ -1059,8 +1059,9 @@ function renderKoor(){
     if (n > 1) mk('go sec', '⬇ Alles in één keer (zip, ' + n + ' PDF’s)', () => koorPdf(metPdf), 'margin-top:8px');
     return;
   }
-  if (!koor.idx.stukken.length) l.innerHTML = '<div class="small">Er staan nog geen stukken klaar.</div>';
-  koor.idx.stukken.forEach(st => {
+  const speelbaar = koor.idx.stukken.filter(st => st.bestanden && st.bestanden.length);   // stukken met alleen een pdf staan alleen in het pdf-menu
+  if (!speelbaar.length) l.innerHTML = '<div class="small">Er staan nog geen stukken klaar.</div>';
+  speelbaar.forEach(st => {
     const b = mk('kstuk', '<span><b style="font-size:17px">' + esc(st.titel) + '</b></span><span style="color:var(--accent-t);font-weight:700;font-size:20px">›</span>', () => koorLoad(st));
   });
   mk('go sec', 'PDF’s', () => { koorPdfMenu = true; renderKoor(); }, 'margin-top:6px');
